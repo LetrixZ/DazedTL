@@ -1,6 +1,7 @@
 """Inline transport, retained receipts, and absolute Batch prices without APIs."""
 
 import json
+import time
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -314,7 +315,9 @@ class OpenRouterBatchTests(unittest.TestCase):
         ):
             client.submit([request()])
         self.assertEqual(str(calls[-1].url), stand_in + "/batches")
-        for failure in (httpx.ReadTimeout("lost response"), 500, 408):
+        # A submit is never repeated, whatever it answered: only a status
+        # read is free enough to ask again.
+        for failure in (httpx.ReadTimeout("lost response"), 500, 408, 404):
             attempts = []
 
             def lost(req):
@@ -406,6 +409,75 @@ class OpenRouterBatchTests(unittest.TestCase):
         self.assertEqual(live["response_format"]["json_schema"]["schema"], schema)
         other = structured_output({"model": MODEL, "messages": []}, schema, live=False)
         self.assertEqual(other["response_format"]["json_schema"]["schema"], schema)
+
+    def test_a_status_read_asks_again_while_openrouter_catches_up(self):
+        # OpenRouter answered 404 for a batch its create had accepted moments
+        # earlier, and the run failed on that first read. A status read is
+        # free and resends nothing, so a missing batch is asked for again.
+        answers = [
+            httpx.Response(
+                404,
+                json={"error": {"code": 404, "message": "Batch job paid not found."}},
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "id": "paid",
+                    "status": "validating",
+                    "request_counts": {"total": 1, "completed": 0, "failed": 0},
+                },
+            ),
+        ]
+        reads, waits = [], []
+
+        def respond(req):
+            reads.append(req)
+            return answers.pop(0)
+
+        with (
+            patch.object(
+                batch,
+                "time",
+                SimpleNamespace(sleep=waits.append, monotonic=time.monotonic),
+            ),
+            batch.Client(
+                "fixture-key", policy=POLICY, transport=httpx.MockTransport(respond)
+            ) as client,
+        ):
+            self.assertEqual(client.retrieve("paid")["status"], "validating")
+        self.assertEqual(
+            [str(read.url) for read in reads],
+            [batch.BASE_URL + "/batches/paid"] * 2,
+        )
+        self.assertEqual(len(waits), 1)
+
+    def test_a_batch_that_stays_missing_is_reported_after_the_waits(self):
+        # Waiting is bounded: a batch OpenRouter never has is still reported,
+        # with its status, once the reads are used up.
+        reads, waits = [], []
+
+        def respond(req):
+            reads.append(req)
+            return httpx.Response(
+                404,
+                json={"error": {"code": 404, "message": "Batch job paid not found."}},
+            )
+
+        with (
+            patch.object(
+                batch,
+                "time",
+                SimpleNamespace(sleep=waits.append, monotonic=time.monotonic),
+            ),
+            batch.Client(
+                "fixture-key", policy=POLICY, transport=httpx.MockTransport(respond)
+            ) as client,
+            self.assertRaises(batch.RequestError) as raised,
+        ):
+            client.retrieve("paid")
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertEqual(len(reads), len(waits) + 1)
+        self.assertEqual(len(reads), batch.LAG_ATTEMPTS)
 
     def test_openrouter_preview_shows_live_routing_as_a_chat_completion(self):
         # A Live estimate's queue carries OpenRouter preferences such as

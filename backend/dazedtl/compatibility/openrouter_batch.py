@@ -21,6 +21,13 @@ from dazedtl.translation.refusals import refusal_reason, refused
 BASE_URL = OWN_APIS["openrouter"]
 TERMINAL = {"completed", "failed", "expired", "cancelled"}
 MAX_RESPONSE_BYTES = 64_000_000
+# A Batch OpenRouter has just accepted can answer 404 to its first status
+# reads: the create is durable before its read path sees it. A status read
+# is free, so a missing batch is asked for again before it is reported;
+# every other refusal says something the run must act on, such as a key or
+# a credit limit, and is reported at once.
+LAG_ATTEMPTS = 4
+LAG_SECONDS = 5
 _worker_policy = None
 _worker_root = None
 _worker_configured = False
@@ -394,7 +401,14 @@ class Client:
                 if isinstance(batch.get("results"), list):
                     self._terminal[identity] = batch
                     return deepcopy(batch)
-        batch = self.request("GET", "batches/" + quote(identity, safe=""))
+        for attempt in range(LAG_ATTEMPTS):
+            try:
+                batch = self.request("GET", "batches/" + quote(identity, safe=""))
+                break
+            except RequestError as error:
+                if error.status_code != 404 or attempt + 1 == LAG_ATTEMPTS:
+                    raise
+                time.sleep(LAG_SECONDS)
         # Keep malformed terminal evidence too; it cannot authorize consumption.
         if batch.get("status") in TERMINAL:
             self.archive(identity, batch, "results")
