@@ -60,15 +60,20 @@ export type NotificationSound = { name: string; data: Uint8Array };
 /** Whether another computer's browser may drive this install, and how. */
 export type RemoteState = {
   enabled: boolean;
-  /** The address to open, on the tailnet when Tailscale answers. */
-  url: string;
-  /** The path a proxy mounts this install under, "/" when none does. */
-  path: string;
+  /** Where the server binds: this computer, or every interface it has. */
+  host: string;
+  port: number;
+  /** The addresses to open, the one to try first at the front. */
+  urls: string[];
   /** The secret the browser sends; empty for the browser's own bridge. */
   token: string;
-  port: number;
   /** Why the server is not running, when it should be. */
   error: string;
+};
+/** Where the server listens, as Settings sets it. */
+export type RemoteSettings = {
+  host: string;
+  port: number;
 };
 /** One release's Keep a Changelog entry; a prerelease has no date. */
 export type ReleaseNotes = {
@@ -140,6 +145,7 @@ declare global {
       remote: {
         state(): Promise<RemoteState>;
         enable(enabled: boolean): Promise<RemoteState>;
+        configure(settings: RemoteSettings): Promise<RemoteState>;
         regenerate(): Promise<RemoteState>;
       };
       onClose(handler: () => Promise<void>, cancelled: () => void): () => void;

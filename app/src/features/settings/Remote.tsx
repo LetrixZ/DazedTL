@@ -4,9 +4,11 @@ import { useRead } from "../../state/useRead";
 import { Button } from "../../ui/Button";
 import { CheckField, FieldRow } from "../../ui/FieldRow";
 import { Message } from "../../ui/Feedback";
+import { Notice } from "../../ui/Notice";
 import { PageBody } from "../../ui/PageLayout";
 import { PathInput } from "../../ui/PathInput";
-import type { RemoteState } from "../../api/transport";
+import { SegmentedControl } from "../../ui/SegmentedControl";
+import type { RemoteSettings, RemoteState } from "../../api/transport";
 
 /** Drives this install from another computer's browser. */
 export default function Remote() {
@@ -14,6 +16,9 @@ export default function Remote() {
   const [saved, setSaved] = useState<RemoteState | null>(null);
   const action = useAction();
   const current = saved ?? read.value ?? null;
+  // Typed values wait here until the field is left, so a port is not applied
+  // one digit at a time.
+  const [port, setPort] = useState<string | null>(null);
   if (!current)
     return (
       <PageBody>
@@ -22,6 +27,23 @@ export default function Remote() {
         />
       </PageBody>
     );
+  const commit = async (change: Partial<RemoteSettings>, key: string) => {
+    action.clear();
+    const result = await action.run(
+      () =>
+        window.dazedtl.remote.configure({
+          host: current.host,
+          port: current.port,
+          ...change,
+        }),
+      "",
+      key,
+    );
+    if (result.ok) {
+      setSaved(result.value);
+      setPort(null);
+    }
+  };
   const change = (enabled: boolean) => {
     action.clear();
     void action.run(
@@ -42,15 +64,13 @@ export default function Remote() {
     action.clear();
     void action.run(() => window.dazedtl.copyText(text), "Copied.", key);
   };
-  const mount =
-    current.path && current.path !== "/" ? ` --set-path=${current.path}` : "";
-  const command = `tailscale serve --bg --https=443${mount} http://127.0.0.1:${current.port}`;
+  const [address, ...others] = current.urls;
   return (
     <PageBody>
       <CheckField
         id="remote-enabled"
         label="Allow remote access"
-        help="A browser on your own network can drive this install, while the games stay on this computer. The server listens only on this computer, and a proxy such as Tailscale provides the encrypted connection."
+        help="A browser can drive this install, while the games stay on this computer. The server speaks plain HTTP, so reach it through a proxy or tunnel that adds HTTPS whenever it leaves this computer."
         checked={current.enabled}
         onChange={change}
       />
@@ -58,16 +78,69 @@ export default function Remote() {
       {current.enabled && (
         <>
           <FieldRow
+            id="remote-host"
+            label="Reachable from"
+            help="Other computers need a proxy or tunnel in front, or a network you trust."
+          >
+            {() => (
+              <SegmentedControl
+                label="Reachable from"
+                value={current.host === "0.0.0.0" ? "network" : "local"}
+                options={[
+                  { value: "local", label: "This computer only" },
+                  { value: "network", label: "My network" },
+                ]}
+                onChange={(value) =>
+                  void commit(
+                    { host: value === "network" ? "0.0.0.0" : "127.0.0.1" },
+                    "host",
+                  )
+                }
+              />
+            )}
+          </FieldRow>
+          {current.host === "0.0.0.0" && (
+            <Notice tone="warning">
+              Other computers can reach this server. Put it behind a proxy or
+              tunnel that adds HTTPS, or the token travels unencrypted.
+            </Notice>
+          )}
+          <FieldRow
+            id="remote-port"
+            label="Port"
+            help="The port the server listens on."
+            error={action.key === "port" ? action.error : ""}
+          >
+            {(control) => (
+              <input
+                {...control}
+                inputMode="numeric"
+                value={port ?? String(current.port)}
+                onChange={(event) => setPort(event.target.value)}
+                onBlur={() => {
+                  const next = Number(port);
+                  if (port === null || next === current.port)
+                    return setPort(null);
+                  void commit({ port: next }, "port");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                }}
+              />
+            )}
+          </FieldRow>
+          <FieldRow
             id="remote-address"
             label="Address"
             help="Open it in the other computer's browser."
+            note={others.length ? `Also ${others.join(", ")}` : undefined}
           >
             {(control) => (
               <div className="remote-field">
-                <PathInput {...control} readOnly value={current.url} />
+                <PathInput {...control} readOnly value={address ?? ""} />
                 <Button
                   variant="quiet"
-                  onClick={() => copy(current.url, "address")}
+                  onClick={() => copy(address ?? "", "address")}
                 >
                   Copy
                 </Button>
@@ -95,24 +168,6 @@ export default function Remote() {
                 </Button>
                 <Button variant="quiet" onClick={regenerate}>
                   New token
-                </Button>
-              </div>
-            )}
-          </FieldRow>
-          <FieldRow
-            id="remote-command"
-            label="Tailscale"
-            help="Run this once on this computer, so the address above reaches it over HTTPS."
-            note="Run it in PowerShell or Command Prompt: Git Bash rewrites a path argument."
-          >
-            {(control) => (
-              <div className="remote-field">
-                <PathInput {...control} readOnly value={command} />
-                <Button
-                  variant="quiet"
-                  onClick={() => copy(command, "command")}
-                >
-                  Copy
                 </Button>
               </div>
             )}

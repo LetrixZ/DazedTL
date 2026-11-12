@@ -53,7 +53,7 @@ async function serve() {
     },
   });
   delete process.env.DAZEDTL_REMOTE_PORT;
-  void remote.enable(true);
+  remote.enable(true);
   await new Promise((resolve) => remote.server.once("listening", resolve));
   return { remote, calls, port: remote.port as number };
 }
@@ -271,15 +271,46 @@ test("an install that never turns remote access on keeps no token on disk", () =
     native: async () => ({}),
   });
   assert.equal(fs.existsSync(remote.settingsFile), false);
-  void remote.enable(true);
+  remote.enable(true);
   assert.equal(fs.existsSync(remote.settingsFile), true);
   remote.close();
 });
 
-test("a proxy's mount path names the page's assets, so a URL without its slash works", async (t) => {
-  const { remote, port } = await serve();
-  t.after(() => remote.close());
-  remote.path = "/pc";
-  const page = await request(port);
-  assert.match(page.text, /src="\/pc\/assets\/app\.js"/);
+test("the address follows where the server binds", () => {
+  const remote = new Remote({
+    root: install(),
+    profile: fs.mkdtempSync(path.join(os.tmpdir(), "dazedtl-profile-")),
+    diagnostics: { record() {}, failure() {} },
+    call: async () => ({}),
+    native: async () => ({}),
+  });
+  assert.deepEqual(remote.configure({ host: "127.0.0.1", port: 47820 }).urls, [
+    "http://127.0.0.1:47820/",
+  ]);
+  // Every interface puts the network's own addresses first, the loopback last.
+  const network = remote.configure({ host: "0.0.0.0", port: 47820 });
+  assert.equal(network.host, "0.0.0.0");
+  assert.equal(network.urls.at(-1), "http://127.0.0.1:47820/");
+  assert.ok(network.urls.length >= 1);
+});
+
+test("a port that cannot work is refused", () => {
+  const remote = new Remote({
+    root: install(),
+    profile: fs.mkdtempSync(path.join(os.tmpdir(), "dazedtl-profile-")),
+    diagnostics: { record() {}, failure() {} },
+    call: async () => ({}),
+    native: async () => ({}),
+  });
+  for (const port of [80, 0, 70000, Number.NaN])
+    assert.throws(
+      () => remote.configure({ host: "127.0.0.1", port }),
+      /port between/,
+      String(port),
+    );
+  // A host the server cannot bind is not a choice Settings offers.
+  assert.equal(
+    remote.configure({ host: "10.0.0.1", port: 47820 }).host,
+    "127.0.0.1",
+  );
 });

@@ -1,21 +1,23 @@
 // Serves the interface and its operations to a browser, so a translation can
 // be driven from another computer while the games stay on this one.
 //
-// The server listens on loopback only: a proxy such as `tailscale serve`
-// provides the TLS and the network, and a bearer token authorizes every
-// operation. The token travels in a header and never in a cookie, so another
-// page cannot borrow it, and a request naming another origin is refused.
+// It is a plain HTTP server: it binds where Settings says, and a bearer token
+// authorizes every operation. The token travels in a header and never in a
+// cookie, so another page cannot borrow it, and a request naming another
+// origin is refused. Encryption is the proxy's or the tunnel's job, which is
+// why the default bind is this computer only.
 "use strict";
 const fs = require("node:fs");
 const http = require("node:http");
+const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { execFile } = require("node:child_process");
 
 const DEFAULT_PORT = 47820;
 // The largest request: image edits and translation files, not game files.
 const MAX_BODY = 8_000_000;
-const TAILNET_TIMEOUT = 4000;
+// Where the server may bind: this computer, or every interface it has.
+const HOSTS = new Set(["127.0.0.1", "0.0.0.0"]);
 
 const TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -52,7 +54,7 @@ const CSP = [
 ].join("; ");
 const META_CSP = /<meta\s+http-equiv="Content-Security-Policy"[\s\S]*?>/i;
 
-/** @typedef {{ token: string, port: number, enabled: boolean }} Saved */
+/** @typedef {{ token: string, host: string, port: number, enabled: boolean }} Saved */
 
 class Remote {
   /**
@@ -76,29 +78,24 @@ class Remote {
     this.server = null;
     /** @type {string} */
     this.error = "";
-    /** @type {string} */
-    this.tailnet = "";
-    /** The path a proxy mounts this install under; "/" when none does. */
-    /** @type {string} */
-    this.path = "/";
     /** @type {Saved} */
     this.saved = this.load();
-    /** @type {Promise<void> | null} */
-    this.probing = null;
   }
 
   /** What Settings shows and the browser uses. */
   get state() {
     return {
       enabled: this.enabled,
-      url: this.tailnet
-        ? `https://${this.tailnet}${this.path === "/" ? "" : this.path}/`
-        : `http://127.0.0.1:${this.port}/`,
-      path: this.path,
-      token: this.saved.token,
+      host: this.saved.host,
       port: this.port,
+      urls: this.urls(),
+      token: this.saved.token,
       error: this.error,
     };
+  }
+
+  get enabled() {
+    return process.env.DAZEDTL_REMOTE === "1" || this.saved.enabled;
   }
 
   /** The port actually served, which a test asks for with port 0. */
@@ -109,8 +106,13 @@ class Remote {
       : this.saved.port;
   }
 
-  get enabled() {
-    return process.env.DAZEDTL_REMOTE === "1" || this.saved.enabled;
+  /** The addresses a browser can open, the one to try first at the front. */
+  urls() {
+    const hosts =
+      this.saved.host === "0.0.0.0"
+        ? [...addresses(), "127.0.0.1"]
+        : [this.saved.host];
+    return hosts.map((host) => `http://${host}:${this.port}/`);
   }
 
   /**
@@ -123,12 +125,14 @@ class Remote {
       if (
         typeof value?.token === "string" &&
         value.token.length >= 32 &&
+        HOSTS.has(value.host) &&
         Number.isInteger(value.port) &&
         value.port >= 0 &&
         value.port < 65536
       )
         return {
           token: value.token,
+          host: value.host,
           port: value.port,
           enabled: value.enabled === true,
         };
@@ -138,6 +142,7 @@ class Remote {
     const requested = Number(process.env.DAZEDTL_REMOTE_PORT);
     return {
       token: crypto.randomBytes(32).toString("base64url"),
+      host: "127.0.0.1",
       port:
         Number.isInteger(requested) && requested >= 0
           ? requested
@@ -186,8 +191,7 @@ class Remote {
       // Nothing is listening, so turning it on again starts a fresh server.
       this.server = null;
     });
-    this.server.listen(this.saved.port, "127.0.0.1");
-    void this.probe();
+    this.server.listen(this.saved.port, this.saved.host);
   }
 
   close() {
@@ -201,22 +205,29 @@ class Remote {
   }
 
   /** Turns remote access on or off, and answers with the new state. */
-  async enable(value) {
+  enable(value) {
     this.saved = { ...this.saved, enabled: value === true };
     this.store(this.saved);
     this.error = "";
-    if (this.saved.enabled) {
-      this.start();
-      // The address is right the first time Settings shows it.
-      await this.probe();
-    } else this.close();
+    if (this.saved.enabled) this.start();
+    else this.close();
     return this.state;
   }
 
-  /** Asks Tailscale once, however many callers wait for the answer. */
-  probe() {
-    this.probing ??= this.findAddress();
-    return this.probing;
+  /** Where to serve, which restarts the server when it is running. */
+  configure(value) {
+    const host = HOSTS.has(value?.host) ? value.host : "127.0.0.1";
+    const port = Number(value?.port);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535)
+      throw new Error("Choose a port between 1024 and 65535.");
+    this.saved = { ...this.saved, host, port };
+    this.store(this.saved);
+    this.error = "";
+    if (this.enabled) {
+      this.close();
+      this.start();
+    }
+    return this.state;
   }
 
   /** Replaces the token; a browser holding the old one is refused at once. */
@@ -227,29 +238,6 @@ class Remote {
     };
     this.store(this.saved);
     return this.state;
-  }
-
-  /**
-   * The address the browser opens, when Tailscale answers: its name for this
-   * computer and the path a serve configuration mounts this install under.
-   */
-  async findAddress() {
-    const [status, serve] = await Promise.all([
-      tailscale("status", "--json"),
-      tailscale("serve", "status", "--json"),
-    ]);
-    const name = status?.Self?.DNSName;
-    if (typeof name === "string" && name)
-      this.tailnet = name.replace(/\.$/, "");
-    // A mount path is where a proxy forwards this install's own port.
-    const web = serve?.Web ?? {};
-    for (const [host, config] of Object.entries(web)) {
-      for (const [mount, handler] of Object.entries(config?.Handlers ?? {})) {
-        if (handler?.Proxy !== `http://127.0.0.1:${this.port}`) continue;
-        this.path = mount || "/";
-        if (!this.tailnet) this.tailnet = host.replace(/:\d+$/, "");
-      }
-    }
   }
 
   /**
@@ -325,17 +313,13 @@ class Remote {
   }
 
   /**
-   * The page as a browser under a proxy needs it: without the build's policy,
-   * which would win over this server's, and with its assets named through the
-   * path the proxy mounts it under, so a URL without the trailing slash works.
+   * The page without the build's own policy, which would win over this
+   * server's, since the stricter of the two applies to each directive.
    *
    * @param {string} html
    */
   page(html) {
-    const mount = this.path === "/" ? "." : this.path;
-    return html
-      .replace(META_CSP, "")
-      .replaceAll('="./assets/', `="${mount}/assets/`);
+    return html.replace(META_CSP, "");
   }
 
   /**
@@ -396,6 +380,15 @@ class Remote {
       crypto.timingSafeEqual(Buffer.from(value), Buffer.from(expected))
     );
   }
+}
+
+/** This computer's addresses on its networks, without its own loopback. */
+function addresses() {
+  const found = [];
+  for (const entries of Object.values(os.networkInterfaces()))
+    for (const entry of entries ?? [])
+      if (entry.family === "IPv4" && !entry.internal) found.push(entry.address);
+  return found;
 }
 
 /** Whether a request's origin is the server's own. */
@@ -463,42 +456,6 @@ function json(response, status, value) {
     "X-Content-Type-Options": "nosniff",
   });
   response.end(raw);
-}
-
-/**
- * A Tailscale command's JSON, or null when Tailscale is not there to ask.
- * Windows installs it outside the path its programs are found on.
- *
- * @param {...string} args
- * @returns {Promise<any>}
- */
-async function tailscale(...args) {
-  const first = await ask("tailscale", args);
-  if (first !== null || process.platform !== "win32") return first;
-  return ask("C:\\Program Files\\Tailscale\\tailscale.exe", args);
-}
-
-/**
- * @param {string} command
- * @param {string[]} args
- * @returns {Promise<any>}
- */
-function ask(command, args) {
-  return new Promise((resolve) => {
-    execFile(
-      command,
-      args,
-      { timeout: TAILNET_TIMEOUT, windowsHide: true },
-      (error, stdout) => {
-        if (error) return resolve(null);
-        try {
-          resolve(JSON.parse(stdout));
-        } catch {
-          resolve(null);
-        }
-      },
-    );
-  });
 }
 
 module.exports = { Remote };

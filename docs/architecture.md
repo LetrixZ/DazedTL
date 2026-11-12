@@ -320,13 +320,14 @@ On Windows a notification needs the app's ID on its Start menu shortcut, so the 
 ## Remote access
 
 [remote.cjs](../app/electron/remote.cjs) serves the built interface and the same operations the window calls, so a translation can be driven from another computer's browser while the games stay on this one.
-It listens on loopback only: a proxy such as `tailscale serve` provides the TLS and the network, and Settings' Remote access section shows the address, the token and the command.
+It is a plain HTTP server bound where Settings says — this computer only by default, or every interface — and every operation needs a bearer token that Settings shows.
 The token travels in a header and never in a cookie, so another page cannot borrow it, and a request naming another origin is refused; the file holding it is readable only by this account, and no token is written until remote access is turned on.
+Encryption is the proxy's or the tunnel's job, which is why the default bind is loopback.
 
 - One bridge, two transports: `/rpc` and `/native/*` call the same functions the window's IPC channels call, so an operation has one implementation.
 - [bridge.ts](../app/src/web/bridge.ts) replaces the preload in a browser and does only what belongs to the computer the user sits at: its clipboard, its notifications, its file choices.
 - A browser has no native dialogs, so a file choice is a typed path, and a folder opens by copying its path.
-- Every address the browser asks for is resolved against the page, so a proxy may mount the install under a path; Settings reads that path from the serve configuration.
+- Every address the browser asks for is resolved against the page, so a proxy may mount the install under a path.
 - Updates replace the desktop install, so a browser neither sees nor starts one.
 - The page is served without the build's own CSP meta tag, whose `connect-src 'none'` would otherwise win over the server's header.
 

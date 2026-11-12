@@ -272,13 +272,16 @@ const bridge: Window["dazedtl"] = {
   remote: {
     state: async (): Promise<RemoteState> => ({
       enabled: true,
-      url: location.origin,
-      path: "/",
-      token: "",
+      host: "",
       port: 0,
+      urls: [location.origin + "/"],
+      token: "",
       error: "",
     }),
     enable: async () => {
+      throw new Error("Remote access is set in the desktop app.");
+    },
+    configure: async () => {
       throw new Error("Remote access is set in the desktop app.");
     },
     regenerate: async () => {

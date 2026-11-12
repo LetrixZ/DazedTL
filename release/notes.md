@@ -2,4 +2,4 @@
 
 ### Added
 
-- **Settings > Remote access:** drive this install from another computer's browser, over Tailscale, with a token.
+- **Settings > Remote access:** drive this install from another computer's browser, with a token and its own address and port.

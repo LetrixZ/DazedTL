@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld("dazedtl", {
   remote: {
     state: () => invoke("dazedtl:remote"),
     enable: (value) => invoke("dazedtl:remote-enable", value),
+    configure: (value) => invoke("dazedtl:remote-configure", value),
     regenerate: () => invoke("dazedtl:remote-regenerate"),
   },
   onClose: (handler, cancelled) => {

@@ -810,6 +810,10 @@ app
       trusted(event);
       return remoteServer.enable(value);
     });
+    ipcMain.handle("dazedtl:remote-configure", (event, value) => {
+      trusted(event);
+      return remoteServer.configure(value);
+    });
     ipcMain.handle("dazedtl:remote-regenerate", (event) => {
       trusted(event);
       return remoteServer.regenerate();
