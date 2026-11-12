@@ -7,3 +7,4 @@
 ### Fixed
 
 - **Translate:** an OpenRouter Batch on a Google model no longer fails every request with "Invalid response_json_schema".
+- **Translate:** a Batch run no longer stops with "status failed (HTTP 404)" over a batch OpenRouter had just accepted.
