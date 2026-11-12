@@ -12,6 +12,7 @@ import { useApplication } from "../../app/ApplicationProvider";
 import { flushDrafts } from "../../state/leaveGuards";
 import { useAction } from "../../state/useAction";
 import { usePathChoice } from "../../ui/PathChoice";
+import { revealLabel } from "../../ui/reveal";
 import { ActionBar } from "../../ui/ActionBar";
 import { ActionControl } from "../../ui/ActionControl";
 import { ActionList, ActionRow } from "../../ui/ActionList";
@@ -159,7 +160,7 @@ export default function ProjectPage({
             {available ? (
               <Button
                 variant="link"
-                aria-label="Open folder"
+                aria-label={revealLabel()}
                 onClick={() =>
                   window.dazedtl.openFolder("project").catch(report)
                 }

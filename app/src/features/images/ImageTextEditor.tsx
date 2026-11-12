@@ -15,6 +15,7 @@ import type {
 } from "../../api/contracts";
 import { useAction } from "../../state/useAction";
 import { useDraft } from "../../state/useDraft";
+import { opensFolders } from "../../ui/reveal";
 import { ActionControl } from "../../ui/ActionControl";
 import { ActionList, ActionRow } from "../../ui/ActionList";
 import { useOwnedFeedback } from "../../ui/FeedbackOwners";
@@ -455,7 +456,7 @@ function Editor({
           const counts = next.result.result;
           feedback = `${counts?.applied || 0} translated targets imported · ${(counts?.missing || 0) + (counts?.empty || 0)} unresolved. Source text and boxes retained.`;
         }
-        if (name === "export" && next.result.path)
+        if (name === "export" && next.result.path && opensFolders())
           await window.dazedtl.openFolder("output", next.result.path);
       },
       "",

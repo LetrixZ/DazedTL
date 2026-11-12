@@ -13,6 +13,7 @@ import { useApplication } from "../../app/ApplicationProvider";
 import { flushDrafts } from "../../state/leaveGuards";
 import { useAction } from "../../state/useAction";
 import { usePathChoice } from "../../ui/PathChoice";
+import { revealLabel, revealNotice } from "../../ui/reveal";
 import { useRead } from "../../state/useRead";
 import { ActionControl, earlierSuccess } from "../../ui/ActionControl";
 import { ActionList, ActionRow } from "../../ui/ActionList";
@@ -253,14 +254,15 @@ export function CheckpointsPanel({
           <ActionControl
             inline
             variant="link"
-            label="Open folder"
+            label={revealLabel()}
             icon={<FolderOpen size={14} aria-hidden="true" />}
             disabled={folder.busy}
             error={folder.error}
+            notice={revealNotice()}
             onClick={() =>
               folder.run(
                 () => window.dazedtl.openFolder("output", timeline.backups!),
-                "",
+                revealNotice(),
                 "backups",
               )
             }
@@ -320,14 +322,14 @@ function CheckpointRow({
         <ActionControl
           inline
           variant="link"
-          label="Open folder"
+          label={revealLabel()}
           icon={<FolderOpen size={14} aria-hidden="true" />}
           disabled={action.busy}
           error={action.error}
           onClick={() =>
             action.run(
               () => window.dazedtl.openFolder("output", result?.folder ?? ""),
-              "",
+              revealNotice(),
               "open",
             )
           }

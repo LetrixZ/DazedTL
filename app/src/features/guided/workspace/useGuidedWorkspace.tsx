@@ -23,6 +23,7 @@ import { heldDrafts } from "../../../state/documentState";
 import { flushDrafts } from "../../../state/leaveGuards";
 import { useAction } from "../../../state/useAction";
 import { usePathChoice } from "../../../ui/PathChoice";
+import { revealLabel, revealNotice } from "../../../ui/reveal";
 import { useDraft } from "../../../state/useDraft";
 import { useOnChange } from "../../../state/useOnChange";
 import { useRead } from "../../../state/useRead";
@@ -1072,7 +1073,7 @@ export function useGuidedWorkspace({
         description="Inspect or copy its JSON files. Some files may contain partial progress."
       >
         <ActionControl
-          label="Open translated folder"
+          label={revealLabel("translated")}
           icon={<FolderOpen size={16} aria-hidden="true" />}
           disabled={disabled}
           {...feedback("translated-folder", "Opening folder…")}
@@ -1082,7 +1083,7 @@ export function useGuidedWorkspace({
                 const folder = await api.guided.outputFolder(project.id);
                 await window.dazedtl.openFolder("output", folder.path);
               },
-              "Translated folder opened.",
+              revealNotice("translated"),
               "translated-folder",
             )
           }
