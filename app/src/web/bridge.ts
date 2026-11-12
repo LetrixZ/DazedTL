@@ -44,11 +44,21 @@ export function acceptToken(value: string) {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+/**
+ * Where this page's operations live. A proxy may mount the install under a
+ * path, and the page's own address is the only thing that says which.
+ */
+function base(): URL {
+  const url = new URL(document.baseURI);
+  if (!url.pathname.endsWith("/")) url.pathname += "/";
+  return url;
+}
+
 /** One request to the install, with the token the browser holds. */
 async function post<T>(path: string, body: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(new URL(path, base()), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -75,7 +85,7 @@ async function native<T>(name: string, args: unknown[]): Promise<T> {
     ok: boolean;
     value?: T;
     error?: { message?: string };
-  }>(`/native/${name}`, { args });
+  }>(`native/${name}`, { args });
   if (!reply.ok)
     throw new Error(reply.error?.message || "The operation could not finish.");
   return reply.value as T;
@@ -168,7 +178,7 @@ const bridge: Window["dazedtl"] = {
   // Paths read as the desktop writes them; this computer has no home folder
   // to shorten them to.
   home: "",
-  call: (version, method, params) => post("/rpc", { version, method, params }),
+  call: (version, method, params) => post("rpc", { version, method, params }),
   ready: async () => {},
   copyText,
   copyDiagnostics: async () => {
@@ -227,12 +237,15 @@ const bridge: Window["dazedtl"] = {
   phone: (message) => native("phone", [message]),
   guide: {
     read: async () => {
-      const response = await fetch("/guide");
+      const response = await fetch(new URL("guide", base()));
       if (!response.ok) throw new Error("The guide could not be read.");
       return response.text();
     },
     image: async (source) =>
-      `/guide/media/${encodeURIComponent(source.split("/").pop() ?? "")}`,
+      new URL(
+        `guide/media/${encodeURIComponent(source.split("/").pop() ?? "")}`,
+        base(),
+      ).href,
     open: async (href) => {
       const url = await native<string>("guide-link", [href]);
       window.open(url, "_blank", "noopener,noreferrer");
@@ -260,6 +273,7 @@ const bridge: Window["dazedtl"] = {
     state: async (): Promise<RemoteState> => ({
       enabled: true,
       url: location.origin,
+      path: "/",
       token: "",
       port: 0,
       error: "",

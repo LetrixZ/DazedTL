@@ -78,6 +78,9 @@ class Remote {
     this.error = "";
     /** @type {string} */
     this.tailnet = "";
+    /** The path a proxy mounts this install under; "/" when none does. */
+    /** @type {string} */
+    this.path = "/";
     /** @type {Saved} */
     this.saved = this.load();
     /** @type {Promise<void> | null} */
@@ -89,8 +92,9 @@ class Remote {
     return {
       enabled: this.enabled,
       url: this.tailnet
-        ? `https://${this.tailnet}/`
+        ? `https://${this.tailnet}${this.path === "/" ? "" : this.path}/`
         : `http://127.0.0.1:${this.port}/`,
+      path: this.path,
       token: this.saved.token,
       port: this.port,
       error: this.error,
@@ -211,7 +215,7 @@ class Remote {
 
   /** Asks Tailscale once, however many callers wait for the answer. */
   probe() {
-    this.probing ??= this.findTailnet();
+    this.probing ??= this.findAddress();
     return this.probing;
   }
 
@@ -225,36 +229,27 @@ class Remote {
     return this.state;
   }
 
-  /** The tailnet name the browser opens, when Tailscale answers. */
-  async findTailnet() {
-    /** @param {string} command */
-    const ask = (command) =>
-      new Promise((resolve) => {
-        execFile(
-          command,
-          ["status", "--json"],
-          { timeout: TAILNET_TIMEOUT, windowsHide: true },
-          (error, stdout) => {
-            if (error) return resolve("");
-            try {
-              const value = JSON.parse(stdout)?.Self?.DNSName;
-              resolve(
-                typeof value === "string" ? value.replace(/\.$/, "") : "",
-              );
-            } catch {
-              resolve("");
-            }
-          },
-        );
-      });
-    // Windows installs Tailscale outside the path its programs are found on.
-    /** @type {string} */
-    const name =
-      (await ask("tailscale")) ||
-      (process.platform === "win32"
-        ? await ask("C:\\Program Files\\Tailscale\\tailscale.exe")
-        : "");
-    if (name) this.tailnet = name;
+  /**
+   * The address the browser opens, when Tailscale answers: its name for this
+   * computer and the path a serve configuration mounts this install under.
+   */
+  async findAddress() {
+    const [status, serve] = await Promise.all([
+      tailscale("status", "--json"),
+      tailscale("serve", "status", "--json"),
+    ]);
+    const name = status?.Self?.DNSName;
+    if (typeof name === "string" && name)
+      this.tailnet = name.replace(/\.$/, "");
+    // A mount path is where a proxy forwards this install's own port.
+    const web = serve?.Web ?? {};
+    for (const [host, config] of Object.entries(web)) {
+      for (const [mount, handler] of Object.entries(config?.Handlers ?? {})) {
+        if (handler?.Proxy !== `http://127.0.0.1:${this.port}`) continue;
+        this.path = mount || "/";
+        if (!this.tailnet) this.tailnet = host.replace(/:\d+$/, "");
+      }
+    }
   }
 
   /**
@@ -317,7 +312,7 @@ class Remote {
       return send(response, 404, "text/plain; charset=utf-8", "Not found.");
     }
     if (path.extname(target).toLowerCase() === ".html")
-      body = Buffer.from(body.toString("utf8").replace(META_CSP, ""));
+      body = Buffer.from(this.page(body.toString("utf8")));
     response.writeHead(200, {
       "Content-Type": type,
       "Content-Length": body.length,
@@ -327,6 +322,20 @@ class Remote {
       "Referrer-Policy": "no-referrer",
     });
     response.end(head ? undefined : body);
+  }
+
+  /**
+   * The page as a browser under a proxy needs it: without the build's policy,
+   * which would win over this server's, and with its assets named through the
+   * path the proxy mounts it under, so a URL without the trailing slash works.
+   *
+   * @param {string} html
+   */
+  page(html) {
+    const mount = this.path === "/" ? "." : this.path;
+    return html
+      .replace(META_CSP, "")
+      .replaceAll('="./assets/', `="${mount}/assets/`);
   }
 
   /**
@@ -454,6 +463,42 @@ function json(response, status, value) {
     "X-Content-Type-Options": "nosniff",
   });
   response.end(raw);
+}
+
+/**
+ * A Tailscale command's JSON, or null when Tailscale is not there to ask.
+ * Windows installs it outside the path its programs are found on.
+ *
+ * @param {...string} args
+ * @returns {Promise<any>}
+ */
+async function tailscale(...args) {
+  const first = await ask("tailscale", args);
+  if (first !== null || process.platform !== "win32") return first;
+  return ask("C:\\Program Files\\Tailscale\\tailscale.exe", args);
+}
+
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @returns {Promise<any>}
+ */
+function ask(command, args) {
+  return new Promise((resolve) => {
+    execFile(
+      command,
+      args,
+      { timeout: TAILNET_TIMEOUT, windowsHide: true },
+      (error, stdout) => {
+        if (error) return resolve(null);
+        try {
+          resolve(JSON.parse(stdout));
+        } catch {
+          resolve(null);
+        }
+      },
+    );
+  });
 }
 
 module.exports = { Remote };

@@ -19,7 +19,8 @@ function install() {
       "<!doctype html><html><head>",
       '<meta http-equiv="Content-Security-Policy"',
       " content=\"default-src 'self'; connect-src 'none'\">",
-      "</head><body></body></html>",
+      '</head><body><script type="module" src="./assets/app.js"></script>',
+      "</body></html>",
     ].join(""),
   );
   fs.writeFileSync(path.join(root, "app/dist/app.js"), "console.log(1);");
@@ -110,6 +111,8 @@ test("the interface is served without the build's own policy, which would block 
     String(page.headers["content-security-policy"]),
     /connect-src 'self'/,
   );
+  // Without a proxy the page names its assets as the build wrote them.
+  assert.match(page.text, /src="\.\/assets\/app\.js"/);
   const script = await request(port, { path: "/app.js" });
   assert.equal(script.status, 200);
   assert.match(String(script.headers["content-type"]), /javascript/);
@@ -271,4 +274,12 @@ test("an install that never turns remote access on keeps no token on disk", () =
   void remote.enable(true);
   assert.equal(fs.existsSync(remote.settingsFile), true);
   remote.close();
+});
+
+test("a proxy's mount path names the page's assets, so a URL without its slash works", async (t) => {
+  const { remote, port } = await serve();
+  t.after(() => remote.close());
+  remote.path = "/pc";
+  const page = await request(port);
+  assert.match(page.text, /src="\/pc\/assets\/app\.js"/);
 });

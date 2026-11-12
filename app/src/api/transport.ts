@@ -62,6 +62,8 @@ export type RemoteState = {
   enabled: boolean;
   /** The address to open, on the tailnet when Tailscale answers. */
   url: string;
+  /** The path a proxy mounts this install under, "/" when none does. */
+  path: string;
   /** The secret the browser sends; empty for the browser's own bridge. */
   token: string;
   port: number;

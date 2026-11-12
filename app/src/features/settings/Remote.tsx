@@ -42,7 +42,9 @@ export default function Remote() {
     action.clear();
     void action.run(() => window.dazedtl.copyText(text), "Copied.", key);
   };
-  const command = `tailscale serve --bg --https=443 http://127.0.0.1:${current.port}`;
+  const mount =
+    current.path && current.path !== "/" ? ` --set-path=${current.path}` : "";
+  const command = `tailscale serve --bg --https=443${mount} http://127.0.0.1:${current.port}`;
   return (
     <PageBody>
       <CheckField
@@ -101,6 +103,7 @@ export default function Remote() {
             id="remote-command"
             label="Tailscale"
             help="Run this once on this computer, so the address above reaches it over HTTPS."
+            note="Run it in PowerShell or Command Prompt: Git Bash rewrites a path argument."
           >
             {(control) => (
               <div className="remote-field">
