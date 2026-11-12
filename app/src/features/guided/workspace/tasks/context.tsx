@@ -107,7 +107,7 @@ export function namesView(w: GuidedWorkspace): TaskView {
             onClick={async () => {
               const result = await action.run(
                 async () => {
-                  const folder = await window.dazedtl.chooseFolder();
+                  const folder = await w.choosePath.folder("Add a game folder");
                   return folder
                     ? await api.guided.referenceAdd(project.id, folder)
                     : null;

@@ -4,6 +4,7 @@ import type { Project, TranslationState } from "../../api/contracts";
 import { useLanguages } from "../../app/LanguagesProvider";
 import { useApplication } from "../../app/ApplicationProvider";
 import { useAction } from "../../state/useAction";
+import { usePathChoice } from "../../ui/PathChoice";
 import { flushDrafts } from "../../state/leaveGuards";
 import { Button } from "../../ui/Button";
 import { Section } from "../../ui/Section";
@@ -52,6 +53,7 @@ export function VersionsPanel({
   const application = useApplication();
   const languages = useLanguages();
   const action = useAction({ observer: application });
+  const choosePath = usePathChoice();
   const [choosing, setChoosing] = useState(false);
   const [release, setRelease] = useState(emptyRelease);
   const [advanced, setAdvanced] = useState(false);
@@ -144,7 +146,7 @@ export function VersionsPanel({
   const browse = (choose: (path: string) => void) =>
     action.run(
       async () => {
-        const path = await window.dazedtl.chooseFolder();
+        const path = await choosePath.folder("Choose a folder");
         if (path) choose(path);
       },
       "",

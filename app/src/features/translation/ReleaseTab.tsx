@@ -15,6 +15,7 @@ import type {
 } from "../../api/contracts";
 import { flushDrafts } from "../../state/leaveGuards";
 import type { useAction } from "../../state/useAction";
+import { usePathChoice } from "../../ui/PathChoice";
 import { useDraft } from "../../state/useDraft";
 import { useRead } from "../../state/useRead";
 import { ActionBar } from "../../ui/ActionBar";
@@ -120,10 +121,11 @@ export function ReleaseTab({
   const artifact = release.artifacts.find((item) => item.kind === kind);
   const edit = (change: Partial<AssistantReleaseForm>) =>
     form.session.edit((current) => ({ ...current, ...change }));
+  const choosePath = usePathChoice();
   const chooseFolder = () =>
     void action.run(
       async () => {
-        const folder = await window.dazedtl.chooseFolder();
+        const folder = await choosePath.folder("Choose the archive's folder");
         if (folder) edit({ directory: folder });
       },
       "",

@@ -227,6 +227,8 @@ const bridge: Window["dazedtl"] = {
   reloadInterface: async () => {
     location.reload();
   },
+  // The interface asks for paths through PathChoice, which shows its own
+  // dialog here; these answer anything that still calls the bridge directly.
   chooseFolder: async () =>
     pickPath("Type the folder's path on the desktop computer."),
   chooseEditor: async () =>

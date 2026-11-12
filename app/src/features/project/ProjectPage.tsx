@@ -11,6 +11,7 @@ import {
 import { useApplication } from "../../app/ApplicationProvider";
 import { flushDrafts } from "../../state/leaveGuards";
 import { useAction } from "../../state/useAction";
+import { usePathChoice } from "../../ui/PathChoice";
 import { ActionBar } from "../../ui/ActionBar";
 import { ActionControl } from "../../ui/ActionControl";
 import { ActionList, ActionRow } from "../../ui/ActionList";
@@ -490,6 +491,7 @@ function FindGameFolder({
 }) {
   const application = useApplication();
   const action = useAction({ observer: application });
+  const choose = usePathChoice();
   return (
     <ActionControl
       label="Find game folder"
@@ -501,7 +503,7 @@ function FindGameFolder({
       error={action.error}
       onClick={() =>
         action.run(async () => {
-          const source = await window.dazedtl.chooseFolder();
+          const source = await choose.folder("Find the game folder");
           if (!source) return;
           await flushDrafts();
           await api.locate(project.id, source);
