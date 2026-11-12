@@ -3,3 +3,7 @@
 ### Added
 
 - **Settings > Remote access:** drive this install from another computer's browser, with a token and its own address and port.
+
+### Fixed
+
+- **Translate:** an OpenRouter Batch on a Google model no longer fails every request with "Invalid response_json_schema".
