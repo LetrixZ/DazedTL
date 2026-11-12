@@ -49,6 +49,10 @@ contextBridge.exposeInMainWorld("dazedtl", {
     save: (sound) => invoke("dazedtl:sound-save", sound),
     clear: () => invoke("dazedtl:sound-clear"),
   },
+  // A browser downloads a saved file through its own one-use address.
+  download: async () => {
+    throw new Error("A download belongs to the browser.");
+  },
   /** Remote access from another computer's browser. */
   remote: {
     state: () => invoke("dazedtl:remote"),

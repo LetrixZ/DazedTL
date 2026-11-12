@@ -4,7 +4,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { FolderOpen } from "lucide-react";
+import { Download, FolderOpen } from "lucide-react";
 import { api } from "../../api/client";
 import type {
   AssistantRelease,
@@ -49,19 +49,33 @@ export function OpenReleaseFolder({
   action: ReturnType<typeof useAction>;
   feedbackKey: string;
 }) {
+  // A browser can neither open a folder on the desktop nor reach the ZIP
+  // beside it, so there the action downloads the archive instead.
+  const download = window.dazedtl.web;
   return (
     <ActionControl
-      label={revealLabel()}
-      icon={<FolderOpen size={16} aria-hidden="true" />}
+      label={download ? "Download ZIP" : revealLabel()}
+      icon={
+        download ? (
+          <Download size={16} aria-hidden="true" />
+        ) : (
+          <FolderOpen size={16} aria-hidden="true" />
+        )
+      }
       disabled={!artifact.available || action.busy}
       feedbackKey={feedbackKey}
       pending={action.busy && action.key === feedbackKey}
-      pendingText="Opening…"
+      pendingText={download ? "Preparing…" : "Opening…"}
       error={action.key === feedbackKey ? action.error : ""}
+      notice={action.key === feedbackKey ? action.notice : ""}
       onClick={() =>
         void action.run(
-          () => window.dazedtl.openFolder("output", artifact.folder),
-          revealNotice(),
+          async () => {
+            if (!download)
+              return window.dazedtl.openFolder("output", artifact.folder);
+            location.href = await window.dazedtl.download(artifact.path);
+          },
+          download ? "The download started." : revealNotice(),
           feedbackKey,
         )
       }

@@ -326,7 +326,7 @@ Encryption is the proxy's or the tunnel's job, which is why the default bind is 
 
 - One bridge, two transports: `/rpc` and `/native/*` call the same functions the window's IPC channels call, so an operation has one implementation.
 - [bridge.ts](../app/src/web/bridge.ts) replaces the preload in a browser and does only what belongs to the computer the user sits at: its clipboard, its notifications, its file choices.
-- A browser has no native dialogs, so a file choice is a typed path, and a folder opens by copying its path.
+- A browser has no native dialogs, so a file choice is a typed path, a folder opens by copying its path, and a saved archive downloads through a one-use address.
 - Every address the browser asks for is resolved against the page, so a proxy may mount the install under a path.
 - Updates replace the desktop install, so a browser neither sees nor starts one.
 - The page is served without the build's own CSP meta tag, whose `connect-src 'none'` would otherwise win over the server's header.

@@ -289,6 +289,10 @@ const bridge: Window["dazedtl"] = {
       await native("sound-clear", []);
     },
   },
+  download: async (path) => {
+    const ticket = await native<string>("download-ticket", [path]);
+    return new URL(ticket, base()).href;
+  },
   remote: {
     state: async (): Promise<RemoteState> => ({
       enabled: true,

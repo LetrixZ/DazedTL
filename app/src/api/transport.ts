@@ -142,6 +142,8 @@ declare global {
         clear(): Promise<void>;
       };
       /** Remote access from another computer's browser. */
+      /** A one-use address to download a file the desktop saved. */
+      download(path: string): Promise<string>;
       remote: {
         state(): Promise<RemoteState>;
         enable(enabled: boolean): Promise<RemoteState>;
