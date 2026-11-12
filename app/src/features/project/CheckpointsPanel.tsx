@@ -12,6 +12,7 @@ import type {
 import { useApplication } from "../../app/ApplicationProvider";
 import { flushDrafts } from "../../state/leaveGuards";
 import { useAction } from "../../state/useAction";
+import { usePathChoice } from "../../ui/PathChoice";
 import { useRead } from "../../state/useRead";
 import { ActionControl, earlierSuccess } from "../../ui/ActionControl";
 import { ActionList, ActionRow } from "../../ui/ActionList";
@@ -65,6 +66,7 @@ export function CheckpointsPanel({
 }) {
   const application = useApplication();
   const action = useAction({ observer: application });
+  const choose = usePathChoice();
   // Opening the backup folder reports apart, so a checkpoint's result stays.
   const folder = useAction();
   const [viewing, setViewing] = useState<Checkpoint | null>(null);
@@ -117,7 +119,8 @@ export function CheckpointsPanel({
         await flushDrafts();
         let destination: string | undefined;
         if (operation === "checkpoint_copy") {
-          destination = (await window.dazedtl.chooseFolder()) ?? undefined;
+          destination =
+            (await choose.folder("Copy the checkpoints to")) ?? undefined;
           if (!destination) return;
         }
         await api.translation.checkpoint(

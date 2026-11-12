@@ -556,7 +556,9 @@ export function GuidedPanel({ w }: { w: GuidedWorkspace }) {
                         onClick={() =>
                           action.run(
                             async () => {
-                              const path = await window.dazedtl.chooseEditor();
+                              const path = await w.choosePath.editor(
+                                "Choose a code editor",
+                              );
                               if (path)
                                 editRelease("tools", {
                                   ...release.tools,

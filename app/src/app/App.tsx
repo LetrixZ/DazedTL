@@ -24,6 +24,7 @@ import Guide from "../features/guide/Guide";
 import { GuideOpener } from "../ui/GuideLink";
 import type { GuideSection } from "../ui/guideSections";
 import { PageHeader, PageLayout, PageMessages } from "../ui/PageLayout";
+import { usePathChoice } from "../ui/PathChoice";
 import { CatMark } from "../ui/CatMark";
 import GuidedWorkflow from "../features/guided/GuidedWorkflow";
 import { guidedProgress, projectAmounts } from "../features/guided/progress";
@@ -58,6 +59,7 @@ export default function App() {
   const application = useApplication();
   const state = application.snapshot?.application;
   const action = useAction({ observer: application });
+  const choose = usePathChoice();
   // Settings stays mounted after its first visit so its session survives.
   const [settingsOpened, setSettingsOpened] = useState(false);
   const [settingsDirty, setSettingsDirty] = useState(false);
@@ -109,7 +111,7 @@ export default function App() {
   }, [loaded]);
   const open = () =>
     action.run(async () => {
-      const source = await window.dazedtl.chooseFolder();
+      const source = await choose.folder("Open a game");
       if (!source) return;
       await flushDrafts();
       await api.open(source);

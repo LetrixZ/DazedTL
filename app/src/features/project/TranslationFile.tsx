@@ -3,6 +3,7 @@ import { api } from "../../api/client";
 import type { Project, TranslationFileImport } from "../../api/contracts";
 import { useApplication } from "../../app/ApplicationProvider";
 import { useAction } from "../../state/useAction";
+import { usePathChoice } from "../../ui/PathChoice";
 import { ActionBar } from "../../ui/ActionBar";
 import { ActionControl } from "../../ui/ActionControl";
 import { Button } from "../../ui/Button";
@@ -22,9 +23,7 @@ export const exportName = (project: Project) =>
  * Saves a project's translation file where the user chooses and says what it
  * holds, or nothing when the user cancels.
  */
-export async function exportTranslation(project: Project) {
-  const path = await window.dazedtl.saveTranslationFile(exportName(project));
-  if (!path) return "";
+export async function exportTranslation(project: Project, path: string) {
   const saved = await api.translation.exportFile(project.id, path);
   const csv = saved.path.toLowerCase().endsWith(".csv");
   const translated =
@@ -52,6 +51,7 @@ export function ExportImport({
 }) {
   const application = useApplication();
   const action = useAction({ observer: application });
+  const paths = usePathChoice();
   const [preview, setPreview] = useState<{
     path: string;
     value: TranslationFileImport;
@@ -59,7 +59,7 @@ export function ExportImport({
   const choose = () =>
     action.run(
       async () => {
-        const path = await window.dazedtl.chooseTranslationFile();
+        const path = await paths.open("Choose a translation file");
         if (!path) return;
         setPreview({
           path,
@@ -87,7 +87,10 @@ export function ExportImport({
             notice={action.key === "export" ? action.notice : ""}
             onClick={async () => {
               const done = await action.run(
-                () => exportTranslation(project),
+                async () => {
+                  const path = await paths.save(exportName(project));
+                  return path ? exportTranslation(project, path) : "";
+                },
                 "",
                 "export",
               );

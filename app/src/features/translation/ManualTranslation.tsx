@@ -9,6 +9,7 @@ import type {
 import { useApplication } from "../../app/ApplicationProvider";
 import { flushDrafts } from "../../state/leaveGuards";
 import { useAction } from "../../state/useAction";
+import { usePathChoice } from "../../ui/PathChoice";
 import { useMinute } from "../../state/useMinute";
 import {
   saveKey,
@@ -36,7 +37,11 @@ import { StatusPanel } from "../../ui/StatusPanel";
 import { TabPanel, Tabs, type Tab } from "../../ui/Tabs";
 import { plural, timeAgo, unavailableReason } from "../../ui/displayText";
 import { GameLanguagesRow } from "../project/GameLanguages";
-import { ImportSummary, exportTranslation } from "../project/TranslationFile";
+import {
+  ImportSummary,
+  exportName,
+  exportTranslation,
+} from "../project/TranslationFile";
 import type { SettingsSection } from "../settings/Settings";
 import {
   attemptJobs,
@@ -110,6 +115,7 @@ function Workspace({
 }) {
   const application = useApplication();
   const action = useAction({ observer: application });
+  const paths = usePathChoice();
   const now = useMinute();
   const draft = useProjectOptions(state, action.report);
   // Manual has no Assistant only: a mode Assistant-led saved reads as Batch,
@@ -159,7 +165,7 @@ function Workspace({
   const choose = async (path: string | null, key = "load") => {
     const done = await action.run(
       async () => {
-        const chosen = path ?? (await window.dazedtl.chooseTranslationFile());
+        const chosen = path ?? (await paths.open("Choose a translation file"));
         if (!chosen) return null;
         const result = await api.translation.manualLoad(project.id, chosen);
         setLoad(result);
@@ -273,7 +279,10 @@ function Workspace({
       notice={action.key === "export" ? action.notice : ""}
       onClick={async () => {
         const done = await action.run(
-          () => exportTranslation(project),
+          async () => {
+            const path = await paths.save(exportName(project));
+            return path ? exportTranslation(project, path) : "";
+          },
           "",
           "export",
         );
@@ -297,9 +306,7 @@ function Workspace({
         onClick={async () => {
           const done = await action.run(
             async () => {
-              const path = await window.dazedtl.saveTranslationFile(
-                "Translation file example.json",
-              );
+              const path = await paths.save("Translation file example.json");
               if (!path) return false;
               await api.translation.manualExample(project.id, path);
               return true;

@@ -22,6 +22,7 @@ import { useLanguages } from "../../../app/LanguagesProvider";
 import { heldDrafts } from "../../../state/documentState";
 import { flushDrafts } from "../../../state/leaveGuards";
 import { useAction } from "../../../state/useAction";
+import { usePathChoice } from "../../../ui/PathChoice";
 import { useDraft } from "../../../state/useDraft";
 import { useOnChange } from "../../../state/useOnChange";
 import { useRead } from "../../../state/useRead";
@@ -98,6 +99,7 @@ export function useGuidedWorkspace({
 }: GuidedProps & { state: GuidedState; translation: TranslationState }) {
   const application = useApplication();
   const action = useAction({ observer: application });
+  const choosePath = usePathChoice();
   const speakerAction = useAction({ observer: application });
   const draft = useGuidedWorkflow(state, action.report);
   const context = useContextDraft(project.id, state.drafts, action.report);
@@ -1154,7 +1156,11 @@ export function useGuidedWorkspace({
   const chooseFolder = (key: "original" | "release") =>
     action.run(
       async () => {
-        const folder = await window.dazedtl.chooseFolder();
+        const folder = await choosePath.folder(
+          key === "original"
+            ? "Choose the matching original folder"
+            : "Choose the release folder",
+        );
         if (!folder) return;
         if (key === "original") editForm("original", folder);
         else editRelease("directory", folder);
@@ -1672,6 +1678,7 @@ export function useGuidedWorkspace({
     chooseFiles,
     closePanel,
     chooseFolder,
+    choosePath,
     saveDocuments,
     guidanceDialog: guidanceSave.dialog,
     source,
