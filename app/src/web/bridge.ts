@@ -44,6 +44,19 @@ export function acceptToken(value: string) {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+const rejected = new Set<() => void>();
+
+/**
+ * Tells the page the token it holds is no longer accepted, so the gate asks
+ * for the current one instead of failing every operation the same way.
+ */
+export function onTokenRejected(handler: () => void) {
+  rejected.add(handler);
+  return () => {
+    rejected.delete(handler);
+  };
+}
+
 /**
  * Where this page's operations live. A proxy may mount the install under a
  * path, and the page's own address is the only thing that says which.
@@ -71,10 +84,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       handler("The desktop app could not be reached.");
     throw new Error("The desktop app could not be reached.");
   }
-  if (response.status === 401)
+  if (response.status === 401) {
+    // The token was replaced on the desktop, so the one here can never work.
+    token = "";
+    localStorage.removeItem(TOKEN_KEY);
+    for (const handler of rejected) handler();
     throw new Error(
-      "The remote access token was refused. Copy the current one from the desktop app's Settings.",
+      "The remote access token was refused. Enter the current one from the desktop app's Settings.",
     );
+  }
   if (!response.ok) throw new Error("The desktop app could not answer.");
   return (await response.json()) as T;
 }

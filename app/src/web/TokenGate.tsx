@@ -1,13 +1,16 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PageBody, PageHeader, PageLayout } from "../ui/PageLayout";
 import { FieldRow } from "../ui/FieldRow";
 import { Button } from "../ui/Button";
-import { acceptToken, needsToken } from "./bridge";
+import { acceptToken, needsToken, onTokenRejected } from "./bridge";
 
 /** Asks for the token Settings shows on the desktop before the app starts. */
 export function TokenGate({ children }: { children: ReactNode }) {
   const [needed, setNeeded] = useState(needsToken);
   const [value, setValue] = useState("");
+  // A token replaced on the desktop brings the gate back, so the browser is
+  // never left failing every operation with no way to enter the current one.
+  useEffect(() => onTokenRejected(() => setNeeded(true)), []);
   if (!needed) return <>{children}</>;
   const connect = () => {
     if (!value.trim()) return;
