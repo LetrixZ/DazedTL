@@ -18,7 +18,7 @@ Behavior one module owns is described in its docstring and pinned by its tests; 
 | [engine](../backend/dazedtl/engine) | Preserved parsers, worker implementation, native tools and translation toolkit |
 
 - The shell composes features; features use shared services without importing each other's internals, and shared UI components neither import features nor call the backend.
-- The renderer is sandboxed, with no filesystem, process or network access.
+- The renderer is sandboxed, with no filesystem, process or network access; a browser reaches only the install that serves it, through [remote access](#remote-access).
 - The Qt GUI from `DazedMTLTool` is the reference for Guided's workflow order and behavior; its retired Electron interface is not a UX reference.
 - The Translation service owns project operations, request plans, accepted results and run recovery, for the UI and the project helper alike.
 - Len's skills own engine investigation and methodology for Assistant-led, with the compatibility layer's context, Git, preparation, injection and provider helpers; the preserved runner owns parsing, speaker preparation, phase profiles, glossary collection and Batch receipts; app workers own the record of original game files, Git baselines, checkpoints and patch packaging for both methods.
@@ -314,8 +314,20 @@ Drafts and actions:
 ### Notifications
 
 [WorkAlerts](../app/src/app/workAlerts.ts) reads every observation outside rendering, so a background window still notices; its docstring says which work calls the user back.
-The main process shows desktop notifications only while the window is unfocused, and [posts each alert to ntfy](../app/electron/phone.cjs) whatever the focus; the renderer reaches no network, and the main process sends only to ntfy.
+The main process shows desktop notifications only while the window is unfocused, and [posts each alert to ntfy](../app/electron/phone.cjs) whatever the focus; the window's renderer reaches no network, and the main process sends only to ntfy.
 On Windows a notification needs the app's ID on its Start menu shortcut, so the main process gives the launcher's shortcut that ID and removes the `Electron.lnk` Electron writes.
+
+## Remote access
+
+[remote.cjs](../app/electron/remote.cjs) serves the built interface and the same operations the window calls, so a translation can be driven from another computer's browser while the games stay on this one.
+It listens on loopback only: a proxy such as `tailscale serve` provides the TLS and the network, and Settings' Remote access section shows the address, the token and the command.
+The token travels in a header and never in a cookie, so another page cannot borrow it, and a request naming another origin is refused; the file holding it is readable only by this account, and no token is written until remote access is turned on.
+
+- One bridge, two transports: `/rpc` and `/native/*` call the same functions the window's IPC channels call, so an operation has one implementation.
+- [bridge.ts](../app/src/web/bridge.ts) replaces the preload in a browser and does only what belongs to the computer the user sits at: its clipboard, its notifications, its file choices.
+- A browser has no native dialogs, so a file choice is a typed path, and a folder opens by copying its path.
+- Updates replace the desktop install, so a browser neither sees nor starts one.
+- The page is served without the build's own CSP meta tag, whose `connect-src 'none'` would otherwise win over the server's header.
 
 ## API changes
 

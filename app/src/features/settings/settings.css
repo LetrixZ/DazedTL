@@ -335,3 +335,15 @@
 .notification-sound button {
   flex-shrink: 0;
 }
+.remote-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.remote-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.remote-field button {
+  flex-shrink: 0;
+}

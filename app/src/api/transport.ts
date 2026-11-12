@@ -57,6 +57,17 @@ export type UpdateState = {
 };
 /** A sound file's name and bytes. */
 export type NotificationSound = { name: string; data: Uint8Array };
+/** Whether another computer's browser may drive this install, and how. */
+export type RemoteState = {
+  enabled: boolean;
+  /** The address to open, on the tailnet when Tailscale answers. */
+  url: string;
+  /** The secret the browser sends; empty for the browser's own bridge. */
+  token: string;
+  port: number;
+  /** Why the server is not running, when it should be. */
+  error: string;
+};
 /** One release's Keep a Changelog entry; a prerelease has no date. */
 export type ReleaseNotes = {
   version: string;
@@ -68,6 +79,8 @@ export type ReportContext = { game?: string; engine?: string; mode?: string };
 declare global {
   interface Window {
     dazedtl: {
+      /** True in a browser, which has no native dialogs, folders or updates. */
+      web: boolean;
       /** The user's home folder, for showing paths home-relative. */
       home: string;
       call(version: string, method: string, params: object): Promise<Envelope>;
@@ -120,6 +133,12 @@ declare global {
         choose(): Promise<NotificationSound | null>;
         save(sound: NotificationSound): Promise<void>;
         clear(): Promise<void>;
+      };
+      /** Remote access from another computer's browser. */
+      remote: {
+        state(): Promise<RemoteState>;
+        enable(enabled: boolean): Promise<RemoteState>;
+        regenerate(): Promise<RemoteState>;
       };
       onClose(handler: () => Promise<void>, cancelled: () => void): () => void;
       onStopped(handler: (message: string) => void): () => void;

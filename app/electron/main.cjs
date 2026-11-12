@@ -13,6 +13,7 @@ const os = require("node:os");
 const path = require("node:path");
 const fs = require("node:fs");
 const { Backend } = require("./backend.cjs");
+const { Remote } = require("./remote.cjs");
 const { Diagnostics } = require("./diagnostics.cjs");
 const { windowSize } = require("./window-size.cjs");
 const { rendererRecovery } = require("./renderer-recovery.cjs");
@@ -58,6 +59,7 @@ let window,
   backend,
   diagnostics,
   updates,
+  remote,
   running = false,
   // "Restart to update" closes through the usual save handshake; the close
   // token it started marks the close that relaunches.
@@ -77,6 +79,95 @@ function trusted(event) {
   )
     throw new Error("Untrusted application request.");
 }
+/**
+ * One application operation, for the window and for a remote browser alike.
+ * Both get the same guards: a version the backend does not speak, an operation
+ * the protocol does not name, and a write while the app is saving.
+ *
+ * @param {any} version
+ * @param {any} method
+ * @param {any} params
+ */
+async function applicationCall(version, method, params) {
+  try {
+    if (version !== protocol.version)
+      throw Object.assign(
+        new Error(
+          "The application and backend versions do not match. Restart after updating.",
+        ),
+        { code: "protocol" },
+      );
+    if (!methods.has(method))
+      throw Object.assign(new Error("Unknown application operation."), {
+        code: "validation",
+      });
+    if (closing && !protocol.methods[method].duringClose)
+      throw Object.assign(new Error("The app is saving before closing."), {
+        code: "validation",
+      });
+    const result = await backend.request(method, params);
+    const selected =
+      method === "workspace_snapshot"
+        ? result?.application?.project
+        : result?.project;
+    if (selected?.source) currentSource = selected.source;
+    if (method === "workspace_snapshot")
+      running = !!result?.application?.running;
+    if (method === "guided_export" || method === "guided_output_folder")
+      outputs.add(result.path);
+    // The backup store from before checkpoints, which Checkpoints opens.
+    if (method === "project_checkpoints" && typeof result?.backups === "string")
+      outputs.add(result.backups);
+    if (method === "workspace_snapshot") {
+      for (const artifact of [
+        ...(result?.guided?.artifacts || []),
+        ...(result?.translation?.release?.artifacts || []),
+      ]) {
+        if (artifact.available === true && typeof artifact.folder === "string")
+          outputs.add(artifact.folder);
+      }
+    }
+    for (const job of result?.translation?.jobs || []) {
+      if (
+        job.kind === "operation" &&
+        job.status === "complete" &&
+        typeof job.result?.path === "string"
+      )
+        outputs.add(path.dirname(job.result.path));
+      // A copy Checkpoints saved opens as its own folder.
+      if (
+        job.kind === "operation" &&
+        job.status === "complete" &&
+        job.action === "checkpoint_copy" &&
+        typeof job.result?.folder === "string"
+      )
+        outputs.add(job.result.folder);
+    }
+    return { version: protocol.version, ok: true, value: result };
+  } catch (error) {
+    const failure =
+      /** @type {{ code?: string, message?: string, details?: unknown }} */ (
+        error
+      );
+    // Coded errors were explained to the user or recorded by the backend;
+    // only unexpected desktop errors need a trail, like backend ones.
+    if (!failure.code)
+      diagnostics.failure("desktop.error", error, {
+        operation: methods.has(method) ? method : "native",
+      });
+    return {
+      version: protocol.version,
+      ok: false,
+      error: failure.code
+        ? {
+            code: failure.code,
+            message: failure.message,
+            details: failure.details,
+          }
+        : { code: "internal", message: "The operation could not finish." },
+    };
+  }
+}
 async function finishClose() {
   if (quit) return;
   quit = true;
@@ -86,6 +177,7 @@ async function finishClose() {
   if (window && !window.isDestroyed()) window.hide();
   // Clicked after the app ends, Windows would start a bare Electron.
   clearNotices();
+  remote?.close();
   if (backend) await backend.close();
   if (restart)
     try {
@@ -359,51 +451,63 @@ app
         throw new Error("Choose a bounded text artifact to copy.");
       await clipboard.writeText(text);
     });
-    ipcMain.handle("dazedtl:copy-diagnostics", async (event) => {
-      trusted(event);
-      try {
-        await clipboard.writeText(await diagnostics.report());
-      } catch (error) {
-        diagnostics.failure("desktop.error", error, { operation: "native" });
-        throw new Error("Diagnostics could not be copied. Try again.");
-      }
-    });
-    ipcMain.handle("dazedtl:copy-problem-report", async (event, context) => {
-      trusted(event);
-      try {
-        await clipboard.writeText(
-          await diagnostics.problemReport(
+    // The window copies these to its own clipboard; a remote browser receives
+    // the text and writes the clipboard of the computer the user sits at.
+    const copyable = {
+      diagnostics: async () => {
+        try {
+          return await diagnostics.report();
+        } catch (error) {
+          diagnostics.failure("desktop.error", error, { operation: "native" });
+          throw new Error("Diagnostics could not be copied. Try again.");
+        }
+      },
+      problemReport: async (context) => {
+        try {
+          return await diagnostics.problemReport(
             context && typeof context === "object" ? context : {},
-          ),
-        );
-      } catch (error) {
-        diagnostics.failure("desktop.error", error, { operation: "native" });
-        throw new Error("The report could not be copied. Try again.");
-      }
-    });
-    ipcMain.handle("dazedtl:copy-fix-task", async (event, context) => {
-      trusted(event);
-      try {
-        await clipboard.writeText(
-          await diagnostics.fixTask(
+          );
+        } catch (error) {
+          diagnostics.failure("desktop.error", error, { operation: "native" });
+          throw new Error("The report could not be copied. Try again.");
+        }
+      },
+      fixTask: async (context) => {
+        try {
+          return await diagnostics.fixTask(
             context && typeof context === "object" ? context : {},
-          ),
-        );
-      } catch (error) {
-        diagnostics.failure("desktop.error", error, { operation: "native" });
-        throw new Error("The task could not be copied. Try again.");
-      }
-    });
-    ipcMain.handle(
-      "dazedtl:tool-feedback",
-      async (event, context, feedback) => {
-        trusted(event);
+          );
+        } catch (error) {
+          diagnostics.failure("desktop.error", error, { operation: "native" });
+          throw new Error("The task could not be copied. Try again.");
+        }
+      },
+      toolFeedback: async (context, feedback) => {
         if (typeof feedback !== "string" || feedback.length > 64_000)
           throw new Error("Choose saved tool feedback to share.");
         return diagnostics.toolFeedback(
           context && typeof context === "object" ? context : {},
           feedback,
         );
+      },
+    };
+    ipcMain.handle("dazedtl:copy-diagnostics", async (event) => {
+      trusted(event);
+      await clipboard.writeText(await copyable.diagnostics());
+    });
+    ipcMain.handle("dazedtl:copy-problem-report", async (event, context) => {
+      trusted(event);
+      await clipboard.writeText(await copyable.problemReport(context));
+    });
+    ipcMain.handle("dazedtl:copy-fix-task", async (event, context) => {
+      trusted(event);
+      await clipboard.writeText(await copyable.fixTask(context));
+    });
+    ipcMain.handle(
+      "dazedtl:tool-feedback",
+      async (event, context, feedback) => {
+        trusted(event);
+        return copyable.toolFeedback(context, feedback);
       },
     );
     ipcMain.handle("dazedtl:save-tool-feedback", async (event, name, text) => {
@@ -441,90 +545,7 @@ app
     });
     ipcMain.handle("dazedtl:call", async (event, version, method, params) => {
       trusted(event);
-      try {
-        if (version !== protocol.version)
-          throw Object.assign(
-            new Error(
-              "The application and backend versions do not match. Restart after updating.",
-            ),
-            { code: "protocol" },
-          );
-        if (!methods.has(method))
-          throw Object.assign(new Error("Unknown application operation."), {
-            code: "validation",
-          });
-        if (closing && !protocol.methods[method].duringClose)
-          throw Object.assign(new Error("The app is saving before closing."), {
-            code: "validation",
-          });
-        const result = await backend.request(method, params);
-        const selected =
-          method === "workspace_snapshot"
-            ? result?.application?.project
-            : result?.project;
-        if (selected?.source) currentSource = selected.source;
-        if (method === "workspace_snapshot")
-          running = !!result?.application?.running;
-        if (method === "guided_export" || method === "guided_output_folder")
-          outputs.add(result.path);
-        // The backup store from before checkpoints, which Checkpoints opens.
-        if (
-          method === "project_checkpoints" &&
-          typeof result?.backups === "string"
-        )
-          outputs.add(result.backups);
-        if (method === "workspace_snapshot") {
-          for (const artifact of [
-            ...(result?.guided?.artifacts || []),
-            ...(result?.translation?.release?.artifacts || []),
-          ]) {
-            if (
-              artifact.available === true &&
-              typeof artifact.folder === "string"
-            )
-              outputs.add(artifact.folder);
-          }
-        }
-        for (const job of result?.translation?.jobs || []) {
-          if (
-            job.kind === "operation" &&
-            job.status === "complete" &&
-            typeof job.result?.path === "string"
-          )
-            outputs.add(path.dirname(job.result.path));
-          // A copy Checkpoints saved opens as its own folder.
-          if (
-            job.kind === "operation" &&
-            job.status === "complete" &&
-            job.action === "checkpoint_copy" &&
-            typeof job.result?.folder === "string"
-          )
-            outputs.add(job.result.folder);
-        }
-        return { version: protocol.version, ok: true, value: result };
-      } catch (error) {
-        const failure =
-          /** @type {{ code?: string, message?: string, details?: unknown }} */ (
-            error
-          );
-        // Coded errors were explained to the user or recorded by the backend;
-        // only unexpected desktop errors need a trail, like backend ones.
-        if (!failure.code)
-          diagnostics.failure("desktop.error", error, {
-            operation: methods.has(method) ? method : "native",
-          });
-        return {
-          version: protocol.version,
-          ok: false,
-          error: failure.code
-            ? {
-                code: failure.code,
-                message: failure.message,
-                details: failure.details,
-              }
-            : { code: "internal", message: "The operation could not finish." },
-        };
-      }
+      return applicationCall(version, method, params);
     });
 
     updates = new Updates(root, app.getPath("userData"), (state) => {
@@ -610,8 +631,8 @@ app
       });
       return selected.canceled ? null : selected.filePaths[0];
     });
-    ipcMain.handle("dazedtl:open-folder", async (event, kind, target) => {
-      trusted(event);
+    /** The folder a reveal opens, checked the same for the window and a browser. */
+    const folderFor = (kind, target) => {
       const folder =
         kind === "project"
           ? currentSource
@@ -633,7 +654,11 @@ app
         throw new Error(
           "The project workspace must stay inside the selected game.",
         );
-      const error = await shell.openPath(folder);
+      return folder;
+    };
+    ipcMain.handle("dazedtl:open-folder", async (event, kind, target) => {
+      trusted(event);
+      const error = await shell.openPath(folderFor(kind, target));
       if (error) throw new Error(error);
     });
     const guide = new Guide(root);
@@ -715,6 +740,79 @@ app
     ipcMain.handle("dazedtl:sound-clear", (event) => {
       trusted(event);
       sound.clear();
+    });
+    // What a remote browser asks this computer to do: build text from this
+    // install, keep its notification sound, and post to the user's phone. The
+    // browser writes its own clipboard and shows its own notifications, since
+    // those belong to the computer the user sits at.
+    /** @type {Map<string, (...args: any[]) => any>} */
+    const native = new Map([
+      ["copy-diagnostics", () => copyable.diagnostics()],
+      ["copy-problem-report", (context) => copyable.problemReport(context)],
+      ["copy-fix-task", (context) => copyable.fixTask(context)],
+      [
+        "tool-feedback",
+        (context, feedback) => copyable.toolFeedback(context, feedback),
+      ],
+      [
+        "phone",
+        (message) =>
+          sendToPhone(message || {}, (url, init) => net.fetch(url, init)),
+      ],
+      // A browser holds no file of its own, so the bytes travel as base64.
+      [
+        "sound-read",
+        () => {
+          const saved = sound.read();
+          return (
+            saved && { name: saved.name, data: saved.data.toString("base64") }
+          );
+        },
+      ],
+      [
+        "sound-save",
+        (value) =>
+          sound.save({ ...value, data: Buffer.from(value.data, "base64") }),
+      ],
+      ["sound-clear", () => sound.clear()],
+      // A browser cannot open a folder on this computer, so it is told where.
+      ["folder-path", (kind, target) => folderFor(kind, target)],
+      ["guide-link", (href) => guide.link(href)],
+      [
+        "renderer-error",
+        (failure) => {
+          if (
+            !["render", "error", "unhandledrejection"].includes(failure?.reason)
+          )
+            return;
+          diagnostics.renderer(failure.reason, failure.causes);
+        },
+      ],
+    ]);
+    const remoteServer = new Remote({
+      root,
+      profile: app.getPath("userData"),
+      diagnostics,
+      call: applicationCall,
+      native: (name, args) => {
+        const operation = native.get(name);
+        if (!operation) throw new Error("Unknown desktop operation.");
+        return operation(...args);
+      },
+    });
+    remote = remoteServer;
+    remoteServer.start();
+    ipcMain.handle("dazedtl:remote", (event) => {
+      trusted(event);
+      return remoteServer.state;
+    });
+    ipcMain.handle("dazedtl:remote-enable", (event, value) => {
+      trusted(event);
+      return remoteServer.enable(value);
+    });
+    ipcMain.handle("dazedtl:remote-regenerate", (event) => {
+      trusted(event);
+      return remoteServer.regenerate();
     });
     ipcMain.handle("dazedtl:close-ready", async (event, reply) => {
       trusted(event);

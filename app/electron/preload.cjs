@@ -12,6 +12,8 @@ const invoke = (channel, ...args) =>
   });
 const homeArgument = "--dazedtl-home=";
 contextBridge.exposeInMainWorld("dazedtl", {
+  // The window is the desktop app; a browser installs its own bridge.
+  web: false,
   home: (
     process.argv.find((value) => value.startsWith(homeArgument)) || ""
   ).slice(homeArgument.length),
@@ -46,6 +48,12 @@ contextBridge.exposeInMainWorld("dazedtl", {
     choose: () => invoke("dazedtl:sound-choose"),
     save: (sound) => invoke("dazedtl:sound-save", sound),
     clear: () => invoke("dazedtl:sound-clear"),
+  },
+  /** Remote access from another computer's browser. */
+  remote: {
+    state: () => invoke("dazedtl:remote"),
+    enable: (value) => invoke("dazedtl:remote-enable", value),
+    regenerate: () => invoke("dazedtl:remote-regenerate"),
   },
   onClose: (handler, cancelled) => {
     let activeToken = 0;
