@@ -1,5 +1,6 @@
 """Omit legacy generation overrides that the app's preferences do not expose."""
 
+import json
 from functools import partial
 from inspect import signature
 
@@ -70,6 +71,15 @@ def host_routing(params, host):
 
 
 def structured_output(params, schema, *, name="translation_response", live=True):
+    """*params* asking for *schema* as its reply, on the route that sends it:
+    a Live request asks with the schema object, and a Batch request to
+    OpenRouter on a Google model with the schema as a JSON string, which is
+    what its Vertex Batch adapter takes (probe: the object is refused with
+    "Invalid response_json_schema: value at top-level must be a string",
+    failing every request of the Batch). Every other Batch keeps the object.
+    """
+    if not live and str(params.get("model", "")).startswith("google/"):
+        schema = json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
     params = {
         **params,
         "response_format": {

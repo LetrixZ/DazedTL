@@ -354,6 +354,59 @@ class OpenRouterBatchTests(unittest.TestCase):
         self.assertNotIn("fixture-key", str(raised.exception))
         self.assertNotIn("input", str(raised.exception))
 
+    def test_a_google_batch_carries_its_schema_as_a_json_string(self):
+        # OpenRouter's Vertex Batch adapter takes the schema as a JSON string;
+        # the object failed every request of a Google model's Batch with
+        # "Invalid response_json_schema: value at top-level must be a string".
+        # Live, and any other provider's Batch, keeps the object.
+        from dazedtl.compatibility.request_parameters import (
+            batch_routing,
+            structured_output,
+        )
+
+        calls = []
+
+        def respond(req):
+            calls.append(req)
+            return httpx.Response(202, json={"id": "google", "status": "validating"})
+
+        model = "google/gemini-3.8-flash"
+        schema = {
+            "type": "object",
+            "properties": {"1": {"type": "string"}},
+            "required": ["1"],
+            "additionalProperties": False,
+        }
+        policy = {
+            **POLICY,
+            "model": model,
+            "structuredOutputs": openrouter.STRUCTURED_OUTPUTS,
+            "providers": ["google-vertex/global"],
+        }
+        params = batch_routing(
+            structured_output(
+                {"model": model, "messages": [{"role": "user", "content": "薬"}]},
+                schema,
+                name="translation",
+                live=False,
+            ),
+            policy,
+        )
+        with batch.Client(
+            "fixture-key", policy=policy, transport=httpx.MockTransport(respond)
+        ) as client:
+            self.assertEqual(
+                client.submit([{"custom_id": "one", "params": params}])["id"],
+                "google",
+            )
+        wire = json.loads(calls[0].content)["requests"][0]["body"]["response_format"]
+        self.assertIsInstance(wire["json_schema"]["schema"], str)
+        self.assertEqual(json.loads(wire["json_schema"]["schema"]), schema)
+        live = structured_output({"model": model, "messages": []}, schema, live=True)
+        self.assertEqual(live["response_format"]["json_schema"]["schema"], schema)
+        other = structured_output({"model": MODEL, "messages": []}, schema, live=False)
+        self.assertEqual(other["response_format"]["json_schema"]["schema"], schema)
+
     def test_openrouter_preview_shows_live_routing_as_a_chat_completion(self):
         # A Live estimate's queue carries OpenRouter preferences such as
         # require_parameters, which are not a Batch host; previewing it crashed.

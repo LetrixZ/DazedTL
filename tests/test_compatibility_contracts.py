@@ -5119,6 +5119,33 @@ class ManualJobs:
                         {"prompt_cache_key": "fixture-cache", "provider": expected},
                     )
 
+            # OpenRouter's Vertex Batch adapter takes the schema as a JSON
+            # string: the object failed every request of a Google model's
+            # Batch with "Invalid response_json_schema: value at top-level
+            # must be a string". Live, and any other provider's Batch, keeps
+            # the object.
+            google = {
+                "protocol": "openai",
+                "provider": "openrouter",
+                "model": "google/gemini-3.8-flash",
+                "endpoint": "https://openrouter.ai/api/v1",
+                "openrouterHost": "",
+                "openrouterStructuredOutputs": STRUCTURED_OUTPUTS,
+                "openrouterBatch": {
+                    **router_policy,
+                    "model": "google/gemini-3.8-flash",
+                    "providers": ["google-vertex/global"],
+                },
+            }
+            schema = output_schema(row["sources"])
+            batch = engine.payload(row, {**google, "mode": "batch"})
+            self.assertEqual(
+                batch["response_format"]["json_schema"]["schema"],
+                json.dumps(schema, ensure_ascii=False, separators=(",", ":")),
+            )
+            live = engine.payload(row, {**google, "mode": "live"})
+            self.assertEqual(live["response_format"]["json_schema"]["schema"], schema)
+
     def test_native_update_completion_property_survives_public_serialization(self):
         @dataclass
         class Update:
