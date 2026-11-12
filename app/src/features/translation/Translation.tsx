@@ -25,6 +25,7 @@ import { ActionBar } from "../../ui/ActionBar";
 import { ActionControl } from "../../ui/ActionControl";
 import { Tabs, TabPanel, type Tab } from "../../ui/Tabs";
 import { Button } from "../../ui/Button";
+import { revealLabel, revealNotice } from "../../ui/reveal";
 import { Feedback, Message } from "../../ui/Feedback";
 import { GameWarnings } from "../../ui/Notice";
 import { FeedbackOwners, useOwnedFeedback } from "../../ui/FeedbackOwners";
@@ -313,13 +314,15 @@ function Workspace({
               <Button
                 disabled={action.busy}
                 onClick={() =>
-                  action.run(() =>
-                    window.dazedtl.openFolder("projectWorkspace"),
+                  action.run(
+                    () => window.dazedtl.openFolder("projectWorkspace"),
+                    revealNotice("workspace"),
+                    "workspace-folder",
                   )
                 }
               >
                 <FolderOpen size={16} />
-                Open workspace folder
+                {revealLabel("workspace")}
               </Button>
             </div>
           )

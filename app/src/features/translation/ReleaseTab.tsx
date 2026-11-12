@@ -16,6 +16,7 @@ import type {
 import { flushDrafts } from "../../state/leaveGuards";
 import type { useAction } from "../../state/useAction";
 import { usePathChoice } from "../../ui/PathChoice";
+import { revealLabel, revealNotice } from "../../ui/reveal";
 import { useDraft } from "../../state/useDraft";
 import { useRead } from "../../state/useRead";
 import { ActionBar } from "../../ui/ActionBar";
@@ -50,7 +51,7 @@ export function OpenReleaseFolder({
 }) {
   return (
     <ActionControl
-      label="Open folder"
+      label={revealLabel()}
       icon={<FolderOpen size={16} aria-hidden="true" />}
       disabled={!artifact.available || action.busy}
       feedbackKey={feedbackKey}
@@ -60,7 +61,7 @@ export function OpenReleaseFolder({
       onClick={() =>
         void action.run(
           () => window.dazedtl.openFolder("output", artifact.folder),
-          "",
+          revealNotice(),
           feedbackKey,
         )
       }

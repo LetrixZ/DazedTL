@@ -11,6 +11,7 @@ import { actionKey } from "../model";
 import type { GuidedWorkspace } from "../useGuidedWorkspace";
 import type { TaskView } from "./view";
 import { StatusHeading } from "../../../../ui/StatusMark";
+import { revealLabel, revealNotice } from "../../../../ui/reveal";
 import { sinceLabel } from "../../../assistant/assistantTasks";
 import { GameUpdatePanel } from "../../../project/GameUpdatePanel";
 import { ToolFeedbackRow } from "../../../assistant/ToolFeedback";
@@ -121,14 +122,14 @@ export function packageView(w: GuidedWorkspace): TaskView {
         }
         open={
           <ActionControl
-            label="Open release folder"
+            label={revealLabel("release")}
             icon={<FolderOpen size={16} aria-hidden="true" />}
             disabled={!artifact?.available || action.busy}
             {...feedback("open-release", "Opening…")}
             onClick={() =>
               action.run(
                 () => window.dazedtl.openFolder("output", artifact!.folder),
-                "Release folder opened.",
+                revealNotice("release"),
                 "open-release",
               )
             }
