@@ -778,6 +778,16 @@ app
       // A browser cannot open a folder on this computer, so it is told where.
       ["folder-path", (kind, target) => folderFor(kind, target)],
       ["guide-link", (href) => guide.link(href)],
+      // A browser downloads a file DazedTL saved, through a one-use address.
+      [
+        "download-ticket",
+        (target) => {
+          const file = path.resolve(String(target));
+          if (!outputs.has(path.dirname(file)) || !fs.statSync(file).isFile())
+            throw new Error("Choose a file DazedTL saved.");
+          return remoteServer.ticket(file);
+        },
+      ],
       [
         "renderer-error",
         (failure) => {

@@ -314,3 +314,34 @@ test("a port that cannot work is refused", () => {
     "127.0.0.1",
   );
 });
+
+test("a download's ticket serves the file once and then not at all", async (t) => {
+  const { remote, port } = await serve();
+  t.after(() => remote.close());
+  const file = path.join(remote.dist, "release.zip");
+  fs.writeFileSync(file, "zip bytes");
+  const ticket = remote.ticket(file);
+  // Relative, so a proxy's mount path stays in front of it.
+  assert.match(ticket, /^download\/[^/]+$/);
+  const first = await request(port, { path: "/" + ticket });
+  assert.equal(first.status, 200);
+  assert.equal(first.text, "zip bytes");
+  assert.match(
+    String(first.headers["content-disposition"]),
+    /attachment; filename\*=UTF-8''release\.zip/,
+  );
+  assert.equal((await request(port, { path: "/" + ticket })).status, 404);
+});
+
+test("a ticket that has expired serves nothing", async (t) => {
+  const { remote, port } = await serve();
+  t.after(() => remote.close());
+  const file = path.join(remote.dist, "release.zip");
+  fs.writeFileSync(file, "zip bytes");
+  const value = remote.ticket(file).slice("download/".length);
+  remote.tickets.get(value).expires = Date.now() - 1;
+  assert.equal(
+    (await request(port, { path: "/download/" + value })).status,
+    404,
+  );
+});

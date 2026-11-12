@@ -141,6 +141,8 @@ declare global {
         save(sound: NotificationSound): Promise<void>;
         clear(): Promise<void>;
       };
+      /** A one-use address to download a file the desktop saved. */
+      download(path: string): Promise<string>;
       /** Remote access from another computer's browser. */
       remote: {
         state(): Promise<RemoteState>;

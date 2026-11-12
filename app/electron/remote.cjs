@@ -18,6 +18,8 @@ const DEFAULT_PORT = 47820;
 const MAX_BODY = 8_000_000;
 // Where the server may bind: this computer, or every interface it has.
 const HOSTS = new Set(["127.0.0.1", "0.0.0.0"]);
+// A download's ticket is used once, and only soon after it is asked for.
+const TICKET_MS = 60_000;
 
 const TYPES = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -80,6 +82,23 @@ class Remote {
     this.error = "";
     /** @type {Saved} */
     this.saved = this.load();
+    /** @type {Map<string, { path: string, expires: number }>} */
+    this.tickets = new Map();
+  }
+
+  /**
+   * A one-use address for a file, for a browser that downloads it. The
+   * address is relative, so a proxy's mount path stays in front of it.
+   *
+   * @param {string} target
+   */
+  ticket(target) {
+    const value = crypto.randomBytes(24).toString("base64url");
+    const now = Date.now();
+    for (const [key, item] of this.tickets)
+      if (item.expires < now) this.tickets.delete(key);
+    this.tickets.set(value, { path: target, expires: now + TICKET_MS });
+    return `download/${value}`;
   }
 
   /** What Settings shows and the browser uses. */
@@ -264,6 +283,8 @@ class Remote {
    */
   async serve(url, request, response) {
     const head = request.method === "HEAD";
+    if (url.pathname.startsWith("/download/"))
+      return this.download(url.pathname.slice("/download/".length), response);
     if (url.pathname === "/guide")
       return this.serveFile(
         path.join(this.docs, "user-guide.md"),
@@ -282,6 +303,39 @@ class Remote {
     if (!target.startsWith(this.dist + path.sep))
       return send(response, 404, "text/plain; charset=utf-8", "Not found.");
     return this.serveFile(target, response, head);
+  }
+
+  /**
+   * Streams a file a ticket names, once. The ticket is the credential, since a
+   * browser's download is a navigation and cannot carry the token.
+   *
+   * @param {string} value
+   * @param {import("node:http").ServerResponse} response
+   */
+  download(value, response) {
+    const item = this.tickets.get(value);
+    this.tickets.delete(value);
+    if (!item || item.expires < Date.now())
+      return send(response, 404, "text/plain; charset=utf-8", "Not found.");
+    let size;
+    try {
+      size = fs.statSync(item.path).size;
+    } catch {
+      return send(response, 404, "text/plain; charset=utf-8", "Not found.");
+    }
+    const name = path.basename(item.path);
+    response.writeHead(200, {
+      "Content-Type":
+        TYPES.get(path.extname(name).toLowerCase()) ??
+        "application/octet-stream",
+      "Content-Length": size,
+      "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    const stream = fs.createReadStream(item.path);
+    stream.on("error", () => response.destroy());
+    stream.pipe(response);
   }
 
   /**
