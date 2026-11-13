@@ -53,6 +53,14 @@ SHARED_PAYLOADS = "shared-payloads-v1"
 # ends with it once the chunks sent before it ended, and a Resume of that
 # failed run sends the rest, as it does for a run sending one at a time.
 STOPPED_SENDING = "stopped_sending"
+# Why a Batch run stops sending after a chunk with failed translations, and
+# the run record's mark that only such failures stopped it: once each failed
+# request has an accepted result, such as one imported for it, the run sends
+# its remaining chunks again by itself (Runner.fixed). Any other reason to
+# stop, such as a provider failure, clears the mark, since sending again
+# might fail and be billed again.
+FAILED_LINES = "Some returned translations failed validation. Later batches have not been submitted."
+FIXABLE = "stopped_for_failed_lines"
 # A chunk's message of why it must be reconciled (unconfirmed).
 UNRESOLVED = "unresolved"
 UNMATCHED = "Returned request IDs are incomplete or belong to another job. Attach the matching job before proceeding."
@@ -767,9 +775,7 @@ class Runner:
                 self.job["states"][item["request"]]["state"] == "failed"
                 for item in chunk["items"]
             ):
-                self.halt(
-                    "Some returned translations failed validation. Later batches have not been submitted."
-                )
+                self.halt(FAILED_LINES, fixable=True)
                 if not self.several:
                     return
         if self.several:
@@ -795,6 +801,31 @@ class Runner:
                     self.save("failed", halted)
                     return
         self.finish()
+
+    def fixed(self):
+        """Lets a Batch run that stopped sending only for failed translations
+        (FIXABLE) send again once each failed request has an accepted result,
+        such as one imported while the run waits: the requests read accepted
+        and the stop is cleared. Whether it was cleared."""
+        if not self.job.get(FIXABLE):
+            return False
+        failed = [
+            identity
+            for identity, row in self.job["states"].items()
+            if row["state"] == "failed"
+        ]
+        changed = False
+        for identity in failed:
+            if self.results.get(self.requests[identity]):
+                self.job["states"][identity] = {"state": "accepted", "message": ""}
+                changed = True
+        left = any(row["state"] == "failed" for row in self.job["states"].values())
+        if not left:
+            del self.job[FIXABLE]
+            self.job.pop(STOPPED_SENDING, None)
+        if changed or not left:
+            self.save()
+        return not left
 
     def unresolved(self, chunk, message):
         """Records why the chunk is unconfirmed: the run ends uncertain with
@@ -828,10 +859,15 @@ class Runner:
             return effort.rejection(configuration["model"], level)
         return ""
 
-    def halt(self, message):
+    def halt(self, message, fixable=False):
         """Sends no further chunk after a failed one: the run ends failed with
         `message`, or, with several chunks in flight, first collects the
-        chunks sent before it (STOPPED_SENDING)."""
+        chunks sent before it (STOPPED_SENDING). Only `fixable` failures, the
+        first reason, mark the run to go on once they are fixed (FIXABLE)."""
+        if fixable and self.job.get(STOPPED_SENDING, message) == message:
+            self.job[FIXABLE] = True
+        else:
+            self.job.pop(FIXABLE, None)
         if self.several:
             self.job.setdefault(STOPPED_SENDING, message)
             self.save()
@@ -1064,6 +1100,7 @@ class Runner:
             self.finish()
             return
         if self.plan["configuration"]["mode"] == "batch":
+            self.fixed()
             self.batch()
         else:
             self.live()

@@ -101,6 +101,7 @@ from .results import (
     review_digest,
     run_quotes,
 )
+from .runner import FIXABLE
 from .window_title import WindowTitle
 
 # The lifecycle record's fields the renderer reads; a ZIP's file stamps stay
@@ -340,8 +341,8 @@ class Translation:
             self.settings, saved if saved in {"batch", "live"} else "batch", "live"
         )
 
-    def idle(self, identity, kind=None):
-        if self.jobs.running(identity, kind):
+    def idle(self, identity, kind=None, exclude=None):
+        if self.jobs.running(identity, kind, exclude):
             raise ValueError(
                 "Pause this project's active operation before changing its inputs."
             )
@@ -1723,8 +1724,21 @@ Additional project instructions:
         return self.run(project_id, run_id)
 
     def accept(self, project_id, run_id, batch_id, input_path):
-        self.idle(project_id)
         job, plan = self.jobs.store.load(run_id, project_id)
+        # A Batch run stopped only by failed translations (FIXABLE) takes a
+        # failed request's result while it waits on its sent chunks; its
+        # worker owns the record and reads the result (Runner.fixed).
+        beside = (
+            plan["kind"] == "translation"
+            and plan["configuration"]["mode"] == "batch"
+            and job["status"] in {"running", "waiting"}
+            and bool(job.get(FIXABLE))
+            and job["states"].get(batch_id, {}).get("state") == "failed"
+        )
+        if beside:
+            self.idle(project_id, exclude=run_id)
+        else:
+            self.idle(project_id)
         if plan["kind"] != "translation":
             raise ValueError("Result receipts belong to translation runs.")
         job = self.jobs.store.settled(job)
@@ -1784,11 +1798,21 @@ Additional project instructions:
         else:
             results.accept(request, receipt["translations"], provenance)
         job["states"][batch_id] = {"state": "accepted", "message": ""}
+        if beside:
+            return self.jobs.store.view(job)
         finished = all(row["state"] == "accepted" for row in job["states"].values())
         if finished:
             job.update(status="complete", message=finished_message(job))
         self.jobs.store.save(job)
         self.receipt_saved(project_id, plan, finished)
+        if (
+            job["status"] == "failed"
+            and job.get(FIXABLE)
+            and all(row["state"] != "failed" for row in job["states"].values())
+        ):
+            # Its last failed translation is fixed: it sends the rest, as its
+            # approval allows (Runner.fixed).
+            return self.jobs.start(run_id, project_id)
         return self.jobs.store.view(job)
 
     def receipt_saved(self, project_id, plan, finished):

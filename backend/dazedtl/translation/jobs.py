@@ -728,11 +728,13 @@ class Jobs:
                 finally:
                     lock.close()
 
-    def running(self, project_id=None, kind=None):
+    def running(self, project_id=None, kind=None, exclude=None):
         """Whether a run or operation, or only one of the given kind, holds
-        the project."""
+        the project, leaving out the run `exclude`."""
         self.reconcile()
         for identity in self.processes:
+            if identity == exclude:
+                continue
             record = self.store.record(identity)
             if (project_id is None or record["project_id"] == project_id) and (
                 kind is None or record["kind"] == kind
@@ -740,6 +742,8 @@ class Jobs:
                 return True
         for job in self.store.list(project_id):
             if job["status"] not in {"running", "waiting", "interrupted"}:
+                continue
+            if job["id"] == exclude:
                 continue
             if kind is not None and job["kind"] != kind:
                 continue
