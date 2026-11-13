@@ -439,6 +439,22 @@ class Client:
                     [(key, "OpenRouter rejected this request.") for key in mapping],
                     usage(batch, []),
                 )
+            if (
+                batch.get("status") == "failed"
+                and counts["succeeded"] == 0
+                and counts["total"] == len(mapping)
+            ):
+                # OpenRouter could not hand the Batch to its provider, so no
+                # request was processed: each fails, and the run goes on
+                # collecting its other Batches.
+                error = batch.get("error")
+                reason = error.get("message") if isinstance(error, dict) else None
+                if not isinstance(reason, str) or not reason.strip():
+                    reason = (
+                        "OpenRouter failed to submit this Batch; nothing was processed."
+                    )
+                reason = " ".join(reason.split())[:300]
+                return {}, [(key, reason) for key in mapping], usage(batch, [])
             raise ResultsUnavailable(
                 "OpenRouter ended this Batch without verifiable results. Inspect its saved receipt; no requests will be resubmitted automatically."
             )

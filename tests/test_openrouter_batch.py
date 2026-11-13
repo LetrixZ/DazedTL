@@ -647,6 +647,42 @@ class OpenRouterBatchTests(unittest.TestCase):
                 },
                 {"one", "two"},
             )
+        # A Batch OpenRouter failed to hand to its provider processed nothing,
+        # so each request fails with its reason instead of stopping the run;
+        # expired with the same counts stays unresolved.
+        received.update(
+            status="failed",
+            request_counts={"total": 2, "completed": 0, "failed": 0},
+            usage=None,
+            error={"message": "Failed to submit batch to provider."},
+        )
+        with batch.Client(
+            "fixture-key",
+            policy=POLICY,
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=received)),
+        ) as client:
+            self.assertEqual(
+                client.collect("paid", {"one": "key1", "two": "key2"})[:2],
+                (
+                    {},
+                    [
+                        ("one", "Failed to submit batch to provider."),
+                        ("two", "Failed to submit batch to provider."),
+                    ],
+                ),
+            )
+        received["status"] = "expired"
+        with (
+            batch.Client(
+                "fixture-key",
+                policy=POLICY,
+                transport=httpx.MockTransport(
+                    lambda _: httpx.Response(200, json=received)
+                ),
+            ) as client,
+            self.assertRaises(batch.ResultsUnavailable),
+        ):
+            client.collect("paid", {"one": "key1", "two": "key2"})
         with (
             batch.Client(
                 "fixture-key",
