@@ -2167,6 +2167,7 @@ export type EffortLevel =
 export type ModelOptions = {
   entriesPerRequest: "" | number | null;
   batchInputTokens?: number | null;
+  batchJobs?: number | null;
   maxOutputTokens?: number | null;
   thinkingEffort?: EffortLevel | null;
   pricing: "automatic" | "custom";
@@ -2271,6 +2272,8 @@ export type Settings = {
   defaultEntriesPerRequest: number;
   defaultOutputTokens?: number;
   defaultBatchInputTokens?: number;
+  defaultBatchJobs?: number;
+  maxBatchJobs?: number;
   activeConnectionId: string;
   connections: Connection[];
   providers: SettingsProvider[];

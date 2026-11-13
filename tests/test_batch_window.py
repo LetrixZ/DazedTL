@@ -865,3 +865,106 @@ class BatchWindowTests(unittest.TestCase):
             stopped = step(identity, provider)
             self.assertEqual(stopped["status"], "uncertain")
             self.assertEqual((provider.calls, provider.polled), (1, []))
+
+    def test_assistant_led_job_slots_keep_n_batches_in_flight(self):
+        # An Assistant-led Batch run with no token window, as on OpenRouter,
+        # frozen with SLOT_POLICY keeps up to its batchJobs chunks in flight
+        # and sends the next as one ends; a run frozen before it sends one
+        # at a time.
+        from dazedtl.compatibility.batch_window import SLOT_POLICY
+        from dazedtl.translation.jobs import RunStore
+        from dazedtl.translation.runner import Runner
+
+        from tests.test_translation import BatchProvider, register, request
+
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            game = base / "game"
+            game.mkdir()
+            register(base, "project", game)
+            store = RunStore(base)
+
+            class Provider(BatchProvider):
+                def __init__(self):
+                    super().__init__()
+                    self.done = set()
+
+                def submit(self, items):
+                    super().submit(items)
+                    return {"id": f"provider-{self.calls}"}
+
+                def status(self, identity):
+                    ended = identity in self.done
+                    return {
+                        "ended": ended,
+                        "terminal_failure": False,
+                        "api_status": "completed" if ended else "in_progress",
+                        "counts": {},
+                    }
+
+            def run(prefix, **policy):
+                job = store.create(
+                    "project",
+                    {
+                        "version": 1,
+                        "kind": "translation",
+                        "source": str(game),
+                        "complete": True,
+                        "requests": [
+                            {
+                                **request(f"{prefix}-{index}"),
+                                "params": {"model": "fixture", "messages": []},
+                            }
+                            for index in range(5)
+                        ],
+                        "configuration": {
+                            "mode": "batch",
+                            "model": "fixture",
+                            "batchJobs": 2,
+                        },
+                        # One request a Batch, as Gemini's schemas split them.
+                        "batch_limits": [1, 100000, None],
+                        **policy,
+                    },
+                    {"cost": 1},
+                )
+                store.authorize(job)
+                return job["id"], Provider()
+
+            def step(identity, provider):
+                Runner(store, identity, provider, lambda: None).step()
+                return store.load(identity)[0]
+
+            def states(job):
+                return [chunk["state"] for chunk in job["batches"]]
+
+            identity, provider = run("slots", batch_slots=SLOT_POLICY)
+            job = step(identity, provider)
+            self.assertEqual(
+                states(job), ["submitted"] * 2 + ["queued"] + ["pending"] * 2
+            )
+            self.assertEqual(
+                (job["status"], job["message"]),
+                ("waiting", "Waiting for one of the 2 Batches in flight to finish."),
+            )
+            # The second ends first; its slot takes the next chunk.
+            provider.done.add(job["batches"][1]["id"])
+            job = step(identity, provider)
+            self.assertEqual(
+                states(job), ["submitted", "complete", "submitted", "queued", "pending"]
+            )
+            self.assertEqual(provider.calls, 3)
+            while job["status"] != "complete":
+                provider.done.update(
+                    chunk["id"] for chunk in job["batches"] if chunk["id"]
+                )
+                job = step(identity, provider)
+            self.assertEqual(provider.calls, 5)
+            self.assertEqual(
+                {row["state"] for row in job["states"].values()}, {"accepted"}
+            )
+
+            # A run frozen before the policy sends one at a time.
+            identity, provider = run("one")
+            job = step(identity, provider)
+            self.assertEqual(states(job), ["submitted"] + ["pending"] * 4)

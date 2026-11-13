@@ -261,6 +261,8 @@ def settings(value):
             "defaultEntriesPerRequest",
             "defaultOutputTokens",
             "defaultBatchInputTokens",
+            "defaultBatchJobs",
+            "maxBatchJobs",
             "draft",
             "activeConnectionId",
             "connections",

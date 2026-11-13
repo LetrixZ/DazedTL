@@ -19,6 +19,8 @@ type EffortLevel = Literal["none", "minimal", "low", "medium", "high", "xhigh", 
 class ModelOptions(TypedDict):
     entriesPerRequest: Literal[""] | int | None
     batchInputTokens: NotRequired[int | None]
+    # The most Batches an Assistant-led OpenRouter run keeps in flight.
+    batchJobs: NotRequired[int | None]
     maxOutputTokens: NotRequired[int | None]
     # settings/effort LEVELS; None leaves the effort to the provider.
     thinkingEffort: NotRequired[EffortLevel | None]
@@ -141,6 +143,8 @@ class Settings(TypedDict):
     defaultEntriesPerRequest: int
     defaultOutputTokens: NotRequired[int]
     defaultBatchInputTokens: NotRequired[int]
+    defaultBatchJobs: NotRequired[int]
+    maxBatchJobs: NotRequired[int]
     activeConnectionId: str
     connections: list[Connection]
     providers: list[SettingsProvider]

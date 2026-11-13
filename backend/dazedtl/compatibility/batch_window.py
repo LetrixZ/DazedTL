@@ -268,6 +268,21 @@ RUN_POLICY = "enqueued-tokens-v1"
 # whole allowance and send the next once the one before it ended.
 CHUNK_POLICY = "quarter-jobs-v1"
 
+# Assistant-led Batch runs frozen with this policy keep up to their
+# configuration's batchJobs provider jobs in flight when no token window
+# applies, as on OpenRouter, and send the next once one ends; runs frozen
+# before it send each chunk once the one before it ended.
+SLOT_POLICY = "job-slots-v1"
+
+
+def in_flight(chunk):
+    """Whether an Assistant-led run's chunk holds a provider job that may
+    still be processing: sent, or maybe sent, and not seen ended."""
+    return (
+        chunk.get("state") in {"submitting", "submitted"}
+        and chunk.get("api_status") not in TERMINAL
+    )
+
 
 def job_tokens(allowance):
     """The most input tokens one provider job packs of the window's Batch
@@ -324,12 +339,7 @@ def run_record(path, info):
                     for key in ("connection_id", "endpoint", "model")
                 },
                 {"plan_sha256": job.get("plan_sha256")},
-                [
-                    chunk
-                    for chunk in chunks
-                    if chunk.get("state") in {"submitting", "submitted"}
-                    and chunk.get("api_status") not in TERMINAL
-                ],
+                [chunk for chunk in chunks if in_flight(chunk)],
                 {chunk["id"] for chunk in chunks if chunk.get("id")},
             )
         except AttributeError, KeyError, TypeError, ValueError:

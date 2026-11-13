@@ -9,7 +9,9 @@ from dazedtl.compatibility import transmission
 from dazedtl.compatibility.batch_window import (
     CHUNK_POLICY,
     RUN_POLICY,
+    SLOT_POLICY,
     chunk_tokens,
+    in_flight,
     job_tokens,
     reserve_run,
 )
@@ -47,7 +49,7 @@ SAVE_INTERVAL = 1.0
 # runs send every request.
 SHARED_PAYLOADS = "shared-payloads-v1"
 # The run record's message of the failed chunk after which a Batch run with
-# several chunks in flight (CHUNK_POLICY) sends no further chunk; the run
+# several chunks in flight (CHUNK_POLICY, SLOT_POLICY) sends no further chunk; the run
 # ends with it once the chunks sent before it ended, and a Resume of that
 # failed run sends the rest, as it does for a run sending one at a time.
 STOPPED_SENDING = "stopped_sending"
@@ -140,7 +142,14 @@ class Runner:
         # before CHUNK_POLICY, all of it, one at a time.
         limits = self.plan.get("batch_limits") or []
         self.token_limit = limits[2] if len(limits) > 2 else None
-        self.several = (
+        # Without a token window, a run frozen with SLOT_POLICY keeps up to
+        # this many chunks in flight; see room.
+        self.slots = (
+            self.plan["configuration"].get("batchJobs")
+            if not self.token_limit and self.plan.get("batch_slots") == SLOT_POLICY
+            else None
+        )
+        self.several = bool(self.slots) or (
             bool(self.token_limit) and self.plan.get("batch_chunks") == CHUNK_POLICY
         )
         # Whether this pass checked the game before sending a chunk (submit).
@@ -831,7 +840,12 @@ class Runner:
 
     def room(self, chunk):
         """Whether the provider's Batch window has room for the chunk now,
-        held while it is sent; runs frozen before RUN_POLICY never wait."""
+        held while it is sent; runs frozen before RUN_POLICY never wait. A
+        run with job slots has room while fewer of its chunks are in flight
+        than it keeps at once."""
+        if self.slots:
+            sent = sum(1 for row in self.job["batches"] if in_flight(row))
+            return nullcontext(sent < self.slots)
         limit = self.token_limit
         if self.plan.get("batch_window") != RUN_POLICY or not limit:
             return nullcontext(True)
@@ -863,7 +877,12 @@ class Runner:
                 if available:
                     return self.send(chunk)
         chunk["state"] = "queued"
-        self.save("waiting", "Waiting for available Batch token capacity.")
+        self.save(
+            "waiting",
+            f"Waiting for one of the {self.slots} Batches in flight to finish."
+            if self.slots
+            else "Waiting for available Batch token capacity.",
+        )
         return False
 
     def send(self, chunk):

@@ -522,6 +522,8 @@ class Settings:
             "defaultEntriesPerRequest": preferences.DEFAULT_ENTRIES_PER_REQUEST,
             "defaultOutputTokens": preferences.DEFAULT_OUTPUT_TOKENS,
             "defaultBatchInputTokens": preferences.DEFAULT_BATCH_INPUT_TOKENS,
+            "defaultBatchJobs": preferences.DEFAULT_BATCH_JOBS,
+            "maxBatchJobs": preferences.MAX_BATCH_JOBS,
             "activeConnectionId": state["active"],
             "connections": connections,
             "providers": [

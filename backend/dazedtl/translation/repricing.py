@@ -53,6 +53,7 @@ PRICE_ONLY = frozenset(
         "openrouterBatch",
         openrouter.UNREAD,
         "batchInputTokens",
+        "batchJobs",
     }
 )
 API_MODES = {"batch", "live", "translate"}

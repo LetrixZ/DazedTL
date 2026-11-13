@@ -180,6 +180,11 @@ def _frozen(settings, mode, *, cached_only, unpriced, choice=None):
             preferences.batch_input_tokens(selected.get("batchInputTokens"))
             or preferences.DEFAULT_BATCH_INPUT_TOKENS
         )
+    if connection["provider"] == "openrouter":
+        requests["batchJobs"] = (
+            preferences.batch_jobs(selected.get("batchJobs"))
+            or preferences.DEFAULT_BATCH_JOBS
+        )
     if connection["provider"] == "openrouter" and connection.get("openrouter_host"):
         requests["openrouterHost"] = connection["openrouter_host"]
     return _Frozen(

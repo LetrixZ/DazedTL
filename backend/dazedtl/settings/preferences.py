@@ -21,6 +21,11 @@ DEFAULT_OUTPUT_TOKENS = 32_768
 # clarification batches reserve from before they record submission intent.
 # Older runs keep their native default or saved sequential limit.
 DEFAULT_BATCH_INPUT_TOKENS = 400_000
+# The most provider Batches an Assistant-led OpenRouter run keeps in flight
+# at once, which a model can override in batchJobs; the run sends the next
+# when one ends (batch_window.SLOT_POLICY).
+DEFAULT_BATCH_JOBS = 10
+MAX_BATCH_JOBS = 50
 # The request policies below are frozen into each new API run before it is
 # estimated, so a policy joins the estimate's identity and applies to Live and
 # Batch alike. A run frozen without one keeps its original parameters, parser
@@ -272,6 +277,16 @@ def batch_input_tokens(value):
     return value
 
 
+def batch_jobs(value):
+    if value is not None and (
+        type(value) is not int or not 1 <= value <= MAX_BATCH_JOBS
+    ):
+        raise ValueError(
+            f"Batches at a time must be a whole number from 1 to {MAX_BATCH_JOBS}."
+        )
+    return value
+
+
 def output_tokens(value):
     if value is not None and (
         type(value) is not int or not 1 <= value <= 9_007_199_254_740_991
@@ -332,6 +347,7 @@ def options(value, *, draft=False):
     # Existing version-two preferences and recovery drafts can omit the override.
     optional = {
         "batchInputTokens",
+        "batchJobs",
         "maxOutputTokens",
         "thinkingEffort",
         "batchPricing",
@@ -345,6 +361,7 @@ def options(value, *, draft=False):
     ):
         raise ValueError("Invalid model options.")
     batch_input_tokens(value.get("batchInputTokens"))
+    batch_jobs(value.get("batchJobs"))
     output_tokens(value.get("maxOutputTokens"))
     # Which levels a model takes is checked where Settings saves the choice
     # (settings/store), since a level the model stops taking reads as the

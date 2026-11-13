@@ -199,6 +199,7 @@ class SettingsTests(unittest.TestCase):
                 ("openrouter", "openai", "https://openrouter.ai/api/v1"),
             )
             self.assertNotIn("batchInputTokens", frozen)
+            self.assertEqual(frozen["batchJobs"], view["defaultBatchJobs"])
             settings.prepare_engine("translate")
             frozen_policy = deepcopy(adapter.manual.request_policy)
             self.assertEqual(frozen_policy["openrouterHost"], "deepinfra")
@@ -2091,6 +2092,9 @@ class SettingsTests(unittest.TestCase):
         for invalid in (0, -1, True, 1.5, "8000000", 9_007_199_254_740_992):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 preferences.options({**legacy_options, "batchInputTokens": invalid})
+        for invalid in (0, True, 1.5, "10", preferences.MAX_BATCH_JOBS + 1):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                preferences.options({**legacy_options, "batchJobs": invalid})
 
     def test_a_thinking_effort_is_sent_only_where_its_model_takes_it(self):
         # A level a provider rejects fails a paid run, so a choice reaches a

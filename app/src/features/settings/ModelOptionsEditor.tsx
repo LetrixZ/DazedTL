@@ -403,6 +403,38 @@ export default function ModelOptionsEditor({
             )}
           </FieldRow>
         )}
+        {connection?.provider === "openrouter" && (
+          <FieldRow
+            id="batch-jobs"
+            label="Batches at a time"
+            help="The most OpenRouter Batches an Assistant-led run keeps processing at once; it sends the next when one finishes. Used by new runs."
+          >
+            {(control) => (
+              <input
+                {...control}
+                className="short-control"
+                type="number"
+                min={1}
+                max={config.maxBatchJobs}
+                step={1}
+                placeholder={
+                  config.defaultBatchJobs == null
+                    ? "Default"
+                    : String(config.defaultBatchJobs)
+                }
+                value={value.batchJobs ?? ""}
+                onChange={(event) =>
+                  change({
+                    batchJobs:
+                      event.target.value === ""
+                        ? null
+                        : Number(event.target.value),
+                  })
+                }
+              />
+            )}
+          </FieldRow>
+        )}
       </Section>
       <Section title="Pricing" hint="USD per million tokens">
         <FieldRow id="pricing-mode" label="Estimate rates">

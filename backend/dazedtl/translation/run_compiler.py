@@ -12,6 +12,7 @@ from pathlib import Path
 from dazedtl import system
 from dazedtl.compatibility.batch_window import CHUNK_POLICY as BATCH_CHUNKS
 from dazedtl.compatibility.batch_window import RUN_POLICY as BATCH_WINDOW
+from dazedtl.compatibility.batch_window import SLOT_POLICY as BATCH_SLOTS
 from dazedtl.settings.execution import worker_secret
 from dazedtl.settings.language_pair import run_source
 from dazedtl.storage import write_json
@@ -512,6 +513,10 @@ def compile_run(
         # Its chunks wait for room in the provider's Batch window, each a
         # quarter of the allowance, several in flight.
         value.update(batch_window=BATCH_WINDOW, batch_chunks=BATCH_CHUNKS)
+    if cfg["mode"] != "agent":
+        # Without a token window its chunks keep up to the configuration's
+        # batchJobs in flight, which a switch to Batch also reads.
+        value["batch_slots"] = BATCH_SLOTS
     if shared is not None:
         value.update(shared_payloads=SHARED_PAYLOADS, askers=shared)
     if preceding is not None:
