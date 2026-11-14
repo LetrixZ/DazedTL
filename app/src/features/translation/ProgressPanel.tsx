@@ -41,7 +41,9 @@ import {
   redoneEstimate,
 } from "./apiRun";
 import { assistantRunState, phaseStates } from "./assistantPhases";
+import { CancelBatchRunDialog } from "./CancelBatchRun";
 import { DeclinedLines } from "./DeclinedLines";
+import { batchCancellation } from "../guided/batchView";
 import { modeLabels } from "./OptionsPanel";
 import { OpenReleaseFolder, patchWaiting } from "./ReleaseTab";
 import { ReleaseArtifactRow } from "../guided/Release";
@@ -479,10 +481,13 @@ export function ApiRun({
   /** What the panel says before there is an estimate. */
   waiting?: string;
 }) {
+  // The cancel review, opened from the control beside Pause.
+  const [cancelling, setCancelling] = useState(false);
   if (!run)
     return (
       <StatusPanel title="API run" state="not_started" description={waiting} />
     );
+  const cancellation = batchCancellation(run);
   const mode = run.mode === "live" ? "live" : "batch";
   const charged = run.usage.openrouter_cost;
   const quote = awaitingQuote(run);
@@ -656,6 +661,24 @@ export function ApiRun({
               <Feedback error={action.error} />
             )}
             {pause}
+            {cancellation.offer && (
+              <ActionControl
+                label="Cancel Batch run"
+                variant="quiet"
+                disabled={action.busy}
+                onClick={() => setCancelling(true)}
+              />
+            )}
+            {cancellation.requested && (
+              <ActionControl
+                label="Cancellation requested"
+                variant="quiet"
+                disabled
+              />
+            )}
+            {!!cancellation.reason && (
+              <p className="muted">{cancellation.reason}</p>
+            )}
             {actions}
             {untold && (
               <>
@@ -671,6 +694,14 @@ export function ApiRun({
           </>
         )}
       </div>
+      {cancelling && (
+        <CancelBatchRunDialog
+          run={run}
+          state={state}
+          action={action}
+          onClose={() => setCancelling(false)}
+        />
+      )}
     </StatusPanel>
   );
 }

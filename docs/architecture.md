@@ -205,6 +205,7 @@ Resync archives a file's working copy, staged outputs and cache, and advances it
 
 - Assistant-led's starting prompt runs the whole method without the user: it asks only for spending approval, a missing API connection, denied access or a decision no source evidence settles, and a check it cannot make stays pending instead of stopping the run.
 - Its API run panel holds the assistant's estimate, and its button is the only approval: the project helper resumes only runs the user approved there, and a newer estimate replaces the one waiting ([newest_estimate](../backend/dazedtl/translation/jobs.py)).
+- Progress and History cancel a Batch run's provider Batches where the provider allows it ([can_cancel](../backend/dazedtl/compatibility/batch_control.py)), after a review of the whole run's scope: the run ends, results already downloaded are kept, and a new estimate translates the rest ([batchCancellation](../app/src/features/guided/batchView.ts), [CancelBatchRun](../app/src/features/translation/CancelBatchRun.tsx)).
 - New games start on API Batch, since the assistant's own plan pays for every turn.
 - In both methods, a Batch the connection can't run shows and runs as Live, with the reason beside the choice ([runnable_mode](../backend/dazedtl/settings/execution.py)), and the saved choice stays.
 - Start over is one checkpoint back to the original game's current version, so the attempt stays in Git history; what Git doesn't keep moves to `.dazedtl/archived`, settings stay, guidance stays unless the user lets it go, and only the user can start it.

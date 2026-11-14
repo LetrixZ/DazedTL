@@ -1,4 +1,4 @@
-import type { Job, RunProcess } from "../../api/contracts.ts";
+import type { Job, RunProcess, TranslationJob } from "../../api/contracts.ts";
 import {
   activeRun,
   terminalBatch,
@@ -77,6 +77,34 @@ export function canRetrySaving(job: Job) {
     ["failed", "stopped", "interrupted", "canceled"].includes(job.status)
   );
 }
+
+/**
+ * Whether Progress offers cancelling a run's provider Batches, and why it
+ * can't while they keep working. One action cancels every Batch the run has
+ * at the provider, since a run can keep several in flight.
+ */
+export function batchCancellation(run: TranslationJob | undefined) {
+  const none = { offer: false, requested: false, reason: "" };
+  if (!run || run.mode !== "batch" || !run.approved) return none;
+  if (["complete", "canceled"].includes(run.status)) return none;
+  const working =
+    ["running", "waiting"].includes(run.status) ||
+    run.batches.some(
+      (batch) =>
+        batch.state !== "pending" &&
+        providerBatchActive(batch.api_status || ""),
+    );
+  if (!working) return none;
+  if (run.cancel_requested) return { ...none, requested: true };
+  if (run.can_cancel_provider === false)
+    return {
+      ...none,
+      reason:
+        "OpenRouter does not expose Batch cancellation. Pausing stops future submissions; the work already sent continues at the provider.",
+    };
+  return { ...none, offer: true };
+}
+
 /** A complete Batch or Live run whose saved output is still intact. */
 export function canReapplyRun(job: Job) {
   return (

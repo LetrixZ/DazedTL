@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Job } from "../app/src/api/contracts.ts";
+import type { Job, TranslationJob } from "../app/src/api/contracts.ts";
 import {
+  batchCancellation,
   batchInProgress,
   batchProgress,
   canRetrySaving,
@@ -271,4 +272,50 @@ test("Batch monitoring keeps unknown counts unknown and interrupted work recover
       false,
     );
   }
+});
+
+test("Progress offers cancel only for a Batch run whose provider work can stop", () => {
+  const run = (over: Partial<TranslationJob>) =>
+    ({
+      id: "run",
+      mode: "batch",
+      status: "waiting",
+      approved: true,
+      cancel_requested: false,
+      can_cancel_provider: true,
+      batches: [
+        {
+          id: "provider",
+          state: "submitted",
+          requests: 40,
+          api_status: "in_progress",
+        },
+      ],
+      ...over,
+    }) as TranslationJob;
+  assert.deepEqual(batchCancellation(run({})), {
+    offer: true,
+    requested: false,
+    reason: "",
+  });
+  // OpenRouter never cancels a submitted Batch.
+  const blocked = batchCancellation(run({ can_cancel_provider: false }));
+  assert.equal(blocked.offer, false);
+  assert.match(blocked.reason, /OpenRouter/);
+  // A finished run and an estimate nobody approved have nothing to cancel.
+  assert.equal(batchCancellation(run({ status: "complete" })).offer, false);
+  assert.equal(
+    batchCancellation(run({ approved: false, status: "ready" })).offer,
+    false,
+  );
+  // A requested cancellation is not offered a second time.
+  assert.equal(
+    batchCancellation(run({ cancel_requested: true })).requested,
+    true,
+  );
+  // A paused run whose provider job still works can be cancelled.
+  assert.equal(batchCancellation(run({ status: "stopped" })).offer, true);
+  // A Live run has no provider Batch, and neither does no run at all.
+  assert.equal(batchCancellation(run({ mode: "live" })).offer, false);
+  assert.equal(batchCancellation(undefined).offer, false);
 });
