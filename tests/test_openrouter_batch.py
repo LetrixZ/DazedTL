@@ -522,6 +522,40 @@ class OpenRouterBatchTests(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 429)
         self.assertEqual(len(reads), batch.RATE_ATTEMPTS)
 
+    def test_a_terminal_batch_read_before_is_answered_from_its_saved_results(self):
+        # Paid results OpenRouter returned once are not asked for again: a
+        # later run of the app collects them even while the API refuses it.
+        done = {
+            "id": "paid",
+            "status": "completed",
+            "request_counts": {"total": 1, "completed": 1, "failed": 0},
+            "results": [{"custom_id": "one"}],
+        }
+        reads = []
+
+        def respond(req):
+            reads.append(req)
+            return httpx.Response(200, json=done)
+
+        with TemporaryDirectory() as directory:
+            with batch.Client(
+                "fixture-key",
+                policy=POLICY,
+                receipt_root=directory,
+                transport=httpx.MockTransport(respond),
+            ) as client:
+                self.assertEqual(client.retrieve("paid")["status"], "completed")
+            with batch.Client(
+                "fixture-key",
+                policy=POLICY,
+                receipt_root=directory,
+                transport=httpx.MockTransport(
+                    lambda req: reads.append(req) or httpx.Response(429, json={})
+                ),
+            ) as client:
+                self.assertEqual(client.retrieve("paid")["results"], done["results"])
+        self.assertEqual(len(reads), 1)
+
     def test_openrouter_preview_shows_live_routing_as_a_chat_completion(self):
         # A Live estimate's queue carries OpenRouter preferences such as
         # require_parameters, which are not a Batch host; previewing it crashed.

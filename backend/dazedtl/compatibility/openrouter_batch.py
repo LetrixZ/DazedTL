@@ -413,16 +413,22 @@ class Client:
             raise ValueError("Choose a retained OpenRouter Batch ID.")
         if identity in self._terminal:
             return deepcopy(self._terminal[identity])
-        if self.receipt_root is not None:
+        for kind in ("accepted", "results") if self.receipt_root is not None else ():
+            # A terminal Batch's results do not change, so the copy kept when
+            # they were read answers again without a request: a read that
+            # failed or was rate limited after OpenRouter had answered would
+            # otherwise leave paid results uncollected.
             path = project_path(
                 self.receipt_root,
-                f"log/openrouter/{digest(identity)}-accepted.json",
+                f"log/openrouter/{digest(identity)}-{kind}.json",
                 exists=False,
             )
             if path.is_file():
                 batch = read_json(path, limit=MAX_RESPONSE_BYTES)
                 normalize(batch, identity)
-                if isinstance(batch.get("results"), list):
+                if batch.get("status") in TERMINAL and isinstance(
+                    batch.get("results"), list
+                ):
                     self._terminal[identity] = batch
                     return deepcopy(batch)
         for attempt in range(LAG_ATTEMPTS):
