@@ -660,7 +660,12 @@ def manual_jobs(source, workspace, lock, allow_providers):
                 plan["scan_speakers"] = True
             if self.scanned_speakers is not None:
                 plan["scanned_speakers"] = deepcopy(self.scanned_speakers)
-            if self.adopt_from is not None:
+            # An estimate builds its requests without the Batch endpoint pin an
+            # OpenRouter structured-output Batch requires, so that Batch
+            # collects its own.
+            if self.adopt_from is not None and not (self.request_policy or {}).get(
+                "openrouterStructuredOutputs"
+            ):
                 seed_requests(directory, plan, Path(self.adopt_from))
             if self.request_policy is not None:
                 if self.request_policy["model"] != plan["settings"]["model"]:
