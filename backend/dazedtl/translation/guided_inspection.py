@@ -574,8 +574,9 @@ class RunInspection:
             raise ValueError("Choose a Batch run belonging to this project.")
         job = self.guided.backend.manual.jobs[run_id]
         plan = self.guided.backend.saved_run_configuration(run_id)
+        from dazedtl.compatibility.batch_control import unsent_requests
         from dazedtl.compatibility.preparations import temporary
-        from dazedtl.compatibility.process_view import BATCH_ENDED, saved
+        from dazedtl.compatibility.process_view import BATCH_ENDED, accepted, saved
 
         if (
             job.get("mode") != "batch"
@@ -588,9 +589,19 @@ class RunInspection:
         if job.get("dazedtl_batch_accepted"):
             raise ValueError("This run's results so far are already being saved.")
         root = self.guided.backend.manual.folder(run_id)
-        if job.get("status") == "complete" or saved(root, "batch_state.json").get(
-            "status"
-        ) not in {"submitted", "partially_submitted"}:
+        state = saved(root, "batch_state.json").get("status")
+        if (
+            job.get("status") == "complete"
+            or state not in {"submitted", "partially_submitted", "fetched"}
+            # Collected results wait to be accepted only while requests were
+            # never sent; saving them has begun otherwise.
+            or state == "fetched"
+            and (
+                accepted(root)
+                or not unsent_requests(root)
+                or self.guided.backend.manual.controller(run_id).running()
+            )
+        ):
             raise ValueError("This run already saved its results.")
         process = self.run_view(run_id).get("process") or {}
         batches = [

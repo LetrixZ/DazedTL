@@ -355,4 +355,9 @@ test("A Batch run offers accepting its results only when some finished and some 
     canAcceptResults(run([done, busy], { resultsCollected: true })),
     false,
   );
+  // Results collected before every request was sent wait for accepting.
+  assert.equal(
+    canAcceptResults(run([done], { resultsCollected: true, remaining: 4 })),
+    true,
+  );
 });

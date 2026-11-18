@@ -180,6 +180,12 @@ class BatchMonitor:
                 )
                 and saved(root, "batch_state.json").get("status")
                 in {"submitted", "partially_submitted"}
+                | (
+                    # Collected before every request was sent.
+                    {"fetched"}
+                    if job.get("dazedtl_batch_accepted") and not accepted(root)
+                    else set()
+                )
                 and not batch_control.no_successful_results(root)
                 and bool(self._owned(identity))
             )
@@ -260,7 +266,7 @@ class BatchMonitor:
             # Rechecking a recovery record is not provider or local work.
             # Keep its last outcome visible until there is new evidence.
         resolve = lambda batch: connections[batch["id"]]
-        if state != "fetched":
+        if state != "fetched" or accepting and not accepted(root):
             observed = []
             for batch in batches:
                 with batch_control.connection(

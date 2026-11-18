@@ -108,8 +108,9 @@ export function batchCancellation(run: TranslationJob | undefined) {
 /**
  * Whether a Batch run offers accepting its results so far: some ended Batch
  * returned translations, and something is left out, such as a Batch still
- * working, requests not sent or failed ones. The rest keeps its source text
- * for a later run.
+ * working, requests not sent or failed ones, as when its results were
+ * collected before every request was sent. The rest keeps its source text for
+ * a later run.
  */
 export function canAcceptResults(job: Job) {
   const process = job.process;
@@ -119,7 +120,9 @@ export function canAcceptResults(job: Job) {
     job.temporary ||
     !process ||
     process.resultsAccepted ||
-    process.resultsCollected
+    // Collected results still leave unsent requests, which only accepting
+    // lets the run save without.
+    (process.resultsCollected && !process.remaining)
   )
     return false;
   const batches = (process.batches || []).filter(
