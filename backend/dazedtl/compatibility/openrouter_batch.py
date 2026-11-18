@@ -28,6 +28,13 @@ MAX_RESPONSE_BYTES = 64_000_000
 # a credit limit, and is reported at once.
 LAG_ATTEMPTS = 4
 LAG_SECONDS = 5
+# OpenRouter's rate limit (HTTP 429) refuses a request before it does anything,
+# so a create or a read is safe to send again once the limit has eased. It is
+# asked again with a growing wait, or the wait OpenRouter names, before the
+# refusal is reported.
+RATE_ATTEMPTS = 6
+RATE_SECONDS = 10
+RATE_MAX_SECONDS = 120
 _worker_policy = None
 _worker_root = None
 _worker_configured = False
@@ -38,9 +45,10 @@ class ResultsUnavailable(ValueError):
 
 
 class RequestError(RuntimeError):
-    def __init__(self, status, reason=""):
+    def __init__(self, status, reason="", retry_after=None):
         from .batch_continuation import REFUSED
 
+        self.retry_after = retry_after
         # A server-side timeout can follow a successful create.
         self.status_code = None if status == 408 else status
         if status in REFUSED:
@@ -221,6 +229,19 @@ class Client:
         self.close()
 
     def request(self, method, path, *, body=None):
+        for attempt in range(RATE_ATTEMPTS):
+            try:
+                return self._send(method, path, body)
+            except RequestError as error:
+                if error.status_code != 429 or attempt + 1 == RATE_ATTEMPTS:
+                    raise
+                wait = error.retry_after
+                if wait is None:
+                    wait = RATE_SECONDS * 2**attempt
+                time.sleep(min(wait, RATE_MAX_SECONDS))
+        raise AssertionError("unreachable")
+
+    def _send(self, method, path, body):
         content = (
             json.dumps(
                 body, ensure_ascii=False, separators=(",", ":"), allow_nan=False
@@ -251,8 +272,11 @@ class Client:
                     body.extend(part)
                     if len(body) > 65536:
                         break
+                header = response.headers.get("Retry-After", "")
                 raise RequestError(
-                    response.status_code, error_reason(bytes(body), self.api_key)
+                    response.status_code,
+                    error_reason(bytes(body), self.api_key),
+                    int(header) if header.isdigit() else None,
                 )
             for part in response.iter_bytes(65536):
                 data.extend(part)

@@ -479,6 +479,49 @@ class OpenRouterBatchTests(unittest.TestCase):
         self.assertEqual(len(reads), len(waits) + 1)
         self.assertEqual(len(reads), batch.LAG_ATTEMPTS)
 
+    def test_a_rate_limited_read_is_asked_again_and_then_reported(self):
+        # A 429 refuses the request before it does anything: it is asked again
+        # after a wait, so a brief limit does not fail a resumed run, while a
+        # limit that holds is still reported once the tries are used up.
+        reads, waits = [], []
+
+        def respond(req):
+            reads.append(req)
+            if len(reads) < 3:
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": "7"},
+                    json={"error": {"message": "Rate limit exceeded"}},
+                )
+            return httpx.Response(200, json={"id": "paid", "status": "validating"})
+
+        fake = SimpleNamespace(sleep=waits.append, monotonic=time.monotonic)
+        with (
+            patch.object(batch, "time", fake),
+            batch.Client(
+                "fixture-key", policy=POLICY, transport=httpx.MockTransport(respond)
+            ) as client,
+        ):
+            self.assertEqual(client.retrieve("paid")["status"], "validating")
+        self.assertEqual(waits, [7, 7])
+
+        reads.clear()
+        waits.clear()
+        with (
+            patch.object(batch, "time", fake),
+            batch.Client(
+                "fixture-key",
+                policy=POLICY,
+                transport=httpx.MockTransport(
+                    lambda req: reads.append(req) or httpx.Response(429, json={})
+                ),
+            ) as client,
+            self.assertRaises(batch.RequestError) as raised,
+        ):
+            client.retrieve("paid")
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertEqual(len(reads), batch.RATE_ATTEMPTS)
+
     def test_openrouter_preview_shows_live_routing_as_a_chat_completion(self):
         # A Live estimate's queue carries OpenRouter preferences such as
         # require_parameters, which are not a Batch host; previewing it crashed.
