@@ -84,8 +84,10 @@ def retained_position(value):
 
 
 class Guided:
-    def __init__(self, backend, projects, settings, translation):
+    def __init__(self, backend, projects, settings, translation, failure=None):
         self.backend, self.projects, self.settings = backend, projects, settings
+        # Records where a background failure happened (diagnostics.failure).
+        self.failure = failure or (lambda *_args, **_kwargs: None)
         self.translation = translation
         self.confirmations = {}
         self.batch_confirmations = {}

@@ -67,9 +67,11 @@ class BatchMonitor:
                     if job and not self.backend.manual.controller(identity).running():
                         job["dazedtl_batch_results_error"] = str(error)
                         self.backend.manual.save(job)
-            except Exception:  # noqa: BLE001
+            except Exception as error:  # noqa: BLE001
                 # Provider errors can contain credentials; keep background
                 # feedback fixed and retain the last successful observation.
+                # Diagnostics keep only the error's type and code locations.
+                self.guided.failure(error, "batch_monitor")
                 with self.backend.lock:
                     self.views[identity] = {
                         **self.views.get(identity, {}),

@@ -96,7 +96,11 @@ class Application:
         self.backend.manual.run_failed = self.settings.refused_in_run
         self.translation.jobs.run_failed = self.settings.refused_in_run
         self.guided = Guided(
-            self.backend, self.projects, self.settings, self.translation
+            self.backend,
+            self.projects,
+            self.settings,
+            self.translation,
+            self.failure,
         )
         self.manual = Manual(self.translation)
         self.exchange = Exchange(self.translation, self.guided.translation_lines)

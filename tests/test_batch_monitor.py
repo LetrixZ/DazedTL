@@ -18,6 +18,9 @@ from tests.engine import replaced_modules
 
 
 class BatchMonitorTests(unittest.TestCase):
+    def setUp(self):
+        self.failures = []
+
     def fixture(self, root):
         batch = {"id": "paid", "provider": "openai", "custom_ids": {"one": "key"}}
         write_json(root / "log/batch_history.json", {"batches": [batch]})
@@ -79,8 +82,21 @@ class BatchMonitorTests(unittest.TestCase):
             backend=backend,
             settings=settings,
             projects=SimpleNamespace(data={"projects": [owner]}),
+            failure=lambda *_args: self.failures.append(_args),
         )
         return BatchMonitor(guided), job, owner
+
+    def test_an_unexpected_check_failure_is_recorded_for_diagnostics(self):
+        # The run shows a fixed message, since provider errors can carry
+        # credentials, so the failure's type and place are recorded instead.
+        with TemporaryDirectory() as directory:
+            monitor, _job, _ = self.fixture(Path(directory))
+            error = RuntimeError("secret detail")
+            with patch.object(monitor, "check", side_effect=error):
+                monitor.tick()
+            self.assertEqual(self.failures, [(error, "batch_monitor")])
+            self.assertEqual(monitor.views["run"]["state"], "error")
+            self.assertNotIn("secret", monitor.views["run"]["message"])
 
     def test_openrouter_missing_results_block_consumption_and_survive_monitor_restart(
         self,
