@@ -8,7 +8,7 @@ from typing import Any
 from dazedtl.storage import write_json
 from dazedtl.translation.files import digest, live_path
 
-from .batch_evidence import extends
+from .batch_refusals import effective_results
 from .process_view import (
     BATCH_ENDED,
     accepted,
@@ -220,16 +220,15 @@ def collect(
             )
         if set(part) - set(batch["custom_ids"].values()):
             raise ValueError("Received results are outside this Batch’s saved scope.")
-        for key, value in part.items():
-            if (
-                key in results
-                and results[key] != value
-                and not extends(results[key], value)
-            ):
-                raise ValueError(
-                    "Received results conflict with a saved response. Existing results were retained."
-                )
-            results[key] = value
+        try:
+            # A refused request's saved result is its clarification's reply,
+            # so the provider's original response is read against the
+            # clarification receipts (batch_refusals) and not against it.
+            results = effective_results(evidence, results, part)
+        except ValueError:
+            raise ValueError(
+                "Received results conflict with a saved response. Existing results were retained."
+            ) from None
         batch.update(
             api_status=status["api_status"],
             request_counts=status.get("counts") or {},

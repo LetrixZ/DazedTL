@@ -192,6 +192,54 @@ class BatchControlTests(unittest.TestCase):
             provider.live.assert_not_called()
             provider.cancel.assert_not_called()
 
+    def test_collecting_again_reads_a_clarified_request_by_its_original_response(self):
+        # A refused request's saved result is its clarification's reply, so a
+        # later collection, such as accepting the run's results, reads the
+        # provider's refusal against the receipts and does not stop on it
+        # before it reaches the Batches that follow.
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch = {
+                "id": "paid",
+                "provider": "openai",
+                "custom_ids": {"one": "key-one"},
+            }
+            write_json(root / "log/batch_history.json", {"batches": [batch]})
+            write_json(
+                root / "log/batch_state.json",
+                {"status": "partially_submitted", "batches": [batch]},
+            )
+            write_json(root / "log/batch_requests.json", {"key-one": {"params": {}}})
+            refusal = {"text": "", "refusal": True}
+            reply = {"text": '{"Line1":"Medicine"}'}
+            write_json(root / "log/batch_results.json", {"key-one": reply})
+            write_json(
+                root / "log/dazedtl-clarified-results.json",
+                {"original": {"key-one": refusal}, "results": {"key-one": reply}},
+            )
+            provider = Mock()
+            provider.status.return_value = {"api_status": "completed", "counts": {}}
+            provider.collect_terminal.return_value = ({"key-one": refusal}, [], {})
+            resolve = lambda _: {
+                "secret": "fixture",
+                "endpoint": "https://fixture.invalid",
+                "organization": "",
+            }
+            with patch.object(
+                batch_control, "TranslationProvider", return_value=provider
+            ):
+                batch_control.collect(root, resolve)
+                self.assertEqual(
+                    read_json(root / "log/batch_results.json")["key-one"], reply
+                )
+                provider.collect_terminal.return_value = (
+                    {"key-one": {"text": "Another response"}},
+                    [],
+                    {},
+                )
+                with self.assertRaisesRegex(ValueError, "conflict"):
+                    batch_control.collect(root, resolve)
+
     def test_accepting_results_so_far_saves_ended_batches_and_abandons_the_rest(
         self,
     ):
