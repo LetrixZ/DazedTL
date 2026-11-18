@@ -15,10 +15,18 @@ export const activeRun = (run?: Job | null) =>
 export const activeWorker = (run?: Job | null) =>
   !!run &&
   ["ready", "running", "waiting"].includes(run.workerStatus ?? run.status);
+// "abandoned" is a Batch a run stopped waiting for when its results so far
+// were accepted (batch_control abandon).
 export const terminalBatch = (status: string) =>
-  ["completed", "ended", "failed", "expired", "cancelled", "canceled"].includes(
-    status,
-  );
+  [
+    "completed",
+    "ended",
+    "failed",
+    "expired",
+    "cancelled",
+    "canceled",
+    "abandoned",
+  ].includes(status);
 export const providerBatchActive = (status: string) =>
   [
     "validating",

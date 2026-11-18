@@ -301,6 +301,7 @@ export type RunProcess = {
   noRequestFiles?: string[];
   monitoring?: BatchMonitoring;
   resultsCollected?: boolean;
+  resultsAccepted?: boolean;
   fileMetrics?: Record<string, FileMetric>;
   mode?: string;
   prepared?: number;
@@ -387,6 +388,19 @@ export type SettledEstimate = {
 
 export type ProviderDetails = {
   batches: ProviderBatch[];
+};
+
+/** What accepting a Batch run's results so far covers, in requests. */
+export type BatchAcceptance = {
+  token: string;
+  runId: string;
+  files: number;
+  returned: number;
+  failed: number;
+  pending: number;
+  unsent: number;
+  pendingBatches: number;
+  cancels: boolean;
 };
 
 export type BatchCancelRequested = {
@@ -4032,6 +4046,11 @@ export type RpcContract = {
     response: BatchCancelRequested;
   };
   guided_batch_collect: { request: RunRequest; response: Job };
+  guided_batch_accept_preview: {
+    request: RunRequest;
+    response: BatchAcceptance;
+  };
+  guided_batch_accept: { request: TokenRequest; response: Job };
   guided_form: { request: GuidedFormRequest; response: Saved };
   guided_context_status: {
     request: GuidedContextStatusRequest;

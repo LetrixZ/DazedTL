@@ -483,7 +483,7 @@ class RunInspection:
     def batch_cancel(self, project_id, token):
         _, native = self.guided.record(project_id)
         review = self.guided.batch_confirmations.get(token)
-        if not review or review["project"] != project_id:
+        if not review or review["project"] != project_id or "binding" not in review:
             raise ValueError("Review cancellation for this project before continuing.")
         value = review["value"]
         if (
@@ -560,6 +560,119 @@ class RunInspection:
         self.guided.settings.prepare_engine(resume=plan)
         # The fetched marker restricts the native runner to local consumption.
         return self.guided.backend.manual.consume_batch(run_id)
+
+    def acceptance(self, native, run_id):
+        """What accepting a Guided Batch run's results so far covers: its
+        ended Batches' results are saved, failed lines and the requests of
+        Batches still working or never sent keep their source text, and a
+        later run translates them. Refuses a run with nothing to accept or
+        nothing left out."""
+        if (
+            run_id not in self.guided.owned_runs(native)
+            or run_id not in self.guided.backend.manual.jobs
+        ):
+            raise ValueError("Choose a Batch run belonging to this project.")
+        job = self.guided.backend.manual.jobs[run_id]
+        plan = self.guided.backend.saved_run_configuration(run_id)
+        from dazedtl.compatibility.preparations import temporary
+        from dazedtl.compatibility.process_view import BATCH_ENDED, saved
+
+        if (
+            job.get("mode") != "batch"
+            or temporary(job)
+            or not job.get("dazedtl_approved")
+            or (plan.get("workflow") or {}).get("id") != native["id"]
+            or plan.get("batch_link")
+        ):
+            raise ValueError("Accepting results applies to an approved Batch run.")
+        if job.get("dazedtl_batch_accepted"):
+            raise ValueError("This run's results so far are already being saved.")
+        root = self.guided.backend.manual.folder(run_id)
+        if job.get("status") == "complete" or saved(root, "batch_state.json").get(
+            "status"
+        ) not in {"submitted", "partially_submitted"}:
+            raise ValueError("This run already saved its results.")
+        process = self.run_view(run_id).get("process") or {}
+        batches = [
+            batch
+            for batch in process.get("batches", [])
+            if not batch.get("clarification")
+        ]
+
+        def count(batch, key):
+            value = (batch.get("counts") or {}).get(key)
+            return value if type(value) is int and value > 0 else 0
+
+        ended = [batch for batch in batches if batch["status"] in BATCH_ENDED]
+        working = [batch for batch in batches if batch["status"] not in BATCH_ENDED]
+        returned = sum(count(batch, "succeeded") for batch in ended)
+        failed = sum(
+            count(batch, key)
+            for batch in ended
+            for key in ("errored", "expired", "canceled")
+        )
+        pending = sum(batch.get("total") or count(batch, "total") for batch in working)
+        unsent = process.get("remaining") or 0
+        if not returned:
+            raise ValueError("No finished Batch has returned translations yet.")
+        if not (working or unsent or failed):
+            raise ValueError(
+                "Every request finished. The run saves its results without accepting."
+            )
+        return {
+            "runId": run_id,
+            "files": len(job.get("files", [])),
+            "returned": returned,
+            "failed": failed,
+            "pending": pending,
+            "unsent": unsent,
+            "pendingBatches": len(working),
+            # Whether the providers of the Batches still working stop them.
+            "cancels": all(batch.get("canCancel") is not False for batch in working),
+        }
+
+    def batch_accept_preview(self, project_id, run_id):
+        _, native = self.guided.record(project_id)
+        if not self.guided.backend.allow_providers:
+            raise ValueError("Provider actions are disabled in offline mode.")
+        value = {**self.acceptance(native, run_id), "token": uuid.uuid4().hex}
+        self.guided.batch_confirmations[value["token"]] = {
+            "project": project_id,
+            "value": value,
+        }
+        if len(self.guided.batch_confirmations) > 32:
+            self.guided.batch_confirmations.pop(
+                next(iter(self.guided.batch_confirmations))
+            )
+        return value
+
+    def batch_accept(self, project_id, token):
+        """Accepts a reviewed Batch run's results so far. The run stops
+        sending, and the app's monitor, once the worker has stopped, cancels
+        or abandons its Batches still working, downloads the ended ones'
+        results and saves them (batch_monitor, batch_control collect)."""
+        _, native = self.guided.record(project_id)
+        review = self.guided.batch_confirmations.get(token)
+        if not review or review["project"] != project_id or "binding" in review:
+            raise ValueError("Review accepting this run's results before continuing.")
+        if not self.guided.backend.allow_providers:
+            raise ValueError("Provider actions are disabled in offline mode.")
+        run_id = review["value"]["runId"]
+        self.acceptance(native, run_id)
+        self.guided.batch_confirmations.pop(token)
+        manual = self.guided.backend.manual
+        job = manual.jobs[run_id]
+        job["dazedtl_batch_accepted"] = True
+        job["dazedtl_batch_stopped"] = True
+        manual.save(job)
+        if manual.controller(run_id).running():
+            # The monitor takes over once the worker has stopped.
+            manual.stop(run_id)
+        monitor = self.guided.batch_monitor
+        monitor.settled.discard(run_id)
+        monitor.views.pop(run_id, None)
+        monitor.wake.set()
+        return self.run_view(run_id)
 
     def inspect(self, project_id, run_id):
         if not isinstance(run_id, str):

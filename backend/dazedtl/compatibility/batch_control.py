@@ -9,7 +9,14 @@ from dazedtl.storage import write_json
 from dazedtl.translation.files import digest, live_path
 
 from .batch_evidence import extends
-from .process_view import BATCH_ENDED, batch_results, evidence_root, queue, saved
+from .process_view import (
+    BATCH_ENDED,
+    accepted,
+    batch_results,
+    evidence_root,
+    queue,
+    saved,
+)
 from .provider_responses import NO_REASON
 from .translation import TranslationProvider
 
@@ -19,6 +26,12 @@ PROVIDERS = {"openai", "anthropic", "gemini", "kimi", "openrouter"}
 
 def can_cancel(provider):
     return provider in PROVIDERS - {"openrouter"}
+
+
+# What an accepted run says of a request whose Batch it stopped waiting for.
+ABANDONED = (
+    "Not collected: this run's finished results were accepted before this Batch ended."
+)
 
 
 def unsent_requests(root):
@@ -31,6 +44,8 @@ def unsent_requests(root):
 
 
 def require_complete_submission(root):
+    if accepted(root):
+        return
     remaining = len(unsent_requests(root))
     if remaining:
         raise ValueError(
@@ -153,12 +168,19 @@ def cancel(root, identity, expected, resolve):
 
 
 def collect(
-    root, resolve, *, commit: Callable[[], AbstractContextManager[Any]] = nullcontext
+    root,
+    resolve,
+    *,
+    commit: Callable[[], AbstractContextManager[Any]] = nullcontext,
+    accept=False,
 ):
     """Retain terminal successes and prepare only a local consume pass.
 
-    The caller excludes running workers. All provider jobs must be terminal;
-    mappings, queue and prior receipts remain intact, including unsent work.
+    The caller excludes running workers. All provider jobs must be terminal,
+    unless the user accepts the results so far (`accept`): then each job
+    still working is cancelled where its provider allows it and abandoned
+    (`ABANDONED`), and the run saves what the ended jobs returned. Mappings,
+    queue and prior receipts remain intact, including unsent work.
     """
     evidence = evidence_root(root)
     state = deepcopy(saved(evidence, "batch_state.json"))
@@ -182,8 +204,13 @@ def collect(
             or not batch["custom_ids"]
         ):
             raise ValueError("A provider Batch is missing its request mapping.")
+        if batch.get("api_status") == "abandoned":
+            continue
         with connection(batch, resolve, receipt_root=evidence) as provider:
             status = provider.status(batch["id"])
+            if status["api_status"] not in TERMINAL and accept:
+                abandon(provider, batch, status)
+                continue
             if status["api_status"] not in TERMINAL:
                 raise ValueError(
                     "The provider is still working. Keep monitoring until every Batch finishes or cancels."
@@ -227,6 +254,10 @@ def collect(
                 for custom, key in batch["custom_ids"].items()
                 if key not in part
             ]
+    if accept and not results:
+        raise ValueError(
+            "No finished Batch has returned translations yet. Keep waiting, or cancel the run."
+        )
     with commit():
         if (
             digest(
@@ -252,6 +283,39 @@ def collect(
                 **state,
                 "status": "fetched",
                 "batch_ids": [batch["id"] for batch in batches],
+                **({"accepted": True} if accept else {}),
             },
         )
     return {"received": len(results)}
+
+
+def abandon(provider, batch, status):
+    """Stop waiting for a Batch still working when its run's results so far
+    are accepted: cancel it where its provider allows it, since its results
+    are never read, and record each of its requests as not collected."""
+    if can_cancel(batch["provider"]):
+        try:
+            provider.cancel(batch["id"])
+        except Exception as error:  # noqa: BLE001
+            # The provider may have ended it meanwhile; the run no longer
+            # reads it either way.
+            batch["cancel_error"] = type(error).__name__
+    total = len(batch["custom_ids"])
+    # None of its results is read, so its requests count as canceled; what
+    # the provider reported is kept beside them.
+    batch.update(
+        api_status="abandoned",
+        abandoned_status=status["api_status"],
+        abandoned_counts=status.get("counts") or {},
+        request_counts={
+            "total": total,
+            "succeeded": 0,
+            "errored": 0,
+            "expired": 0,
+            "canceled": total,
+        },
+        provider_errors=[
+            {"custom_id": custom, "message": ABANDONED}
+            for custom in batch["custom_ids"]
+        ],
+    )

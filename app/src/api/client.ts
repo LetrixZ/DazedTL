@@ -423,6 +423,10 @@ export const api = {
       request("guided_batch_cancel", { project_id, token }),
     batchCollect: (project_id: string, run_id: string) =>
       request("guided_batch_collect", { project_id, run_id }),
+    batchAcceptPreview: (project_id: string, run_id: string) =>
+      request("guided_batch_accept_preview", { project_id, run_id }),
+    batchAccept: (project_id: string, token: string) =>
+      request("guided_batch_accept", { project_id, token }),
     form: (project_id: string, value: GuidedForm) =>
       request("guided_form", { project_id, value }),
     position: (

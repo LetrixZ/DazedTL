@@ -105,6 +105,41 @@ export function batchCancellation(run: TranslationJob | undefined) {
   return { ...none, offer: true };
 }
 
+/**
+ * Whether a Batch run offers accepting its results so far: some ended Batch
+ * returned translations, and something is left out, such as a Batch still
+ * working, requests not sent or failed ones. The rest keeps its source text
+ * for a later run.
+ */
+export function canAcceptResults(job: Job) {
+  const process = job.process;
+  if (
+    job.mode !== "batch" ||
+    job.status === "complete" ||
+    job.temporary ||
+    !process ||
+    process.resultsAccepted ||
+    process.resultsCollected
+  )
+    return false;
+  const batches = (process.batches || []).filter(
+    (batch) => !batch.clarification,
+  );
+  const ended = batches.filter((batch) => terminalBatch(batch.status));
+  const returned = ended.some(
+    (batch) => (batchCount(batch.counts.succeeded) || 0) > 0,
+  );
+  const failed = ended.some((batch) =>
+    ["errored", "expired", "canceled"].some(
+      (key) => (batchCount(batch.counts[key]) || 0) > 0,
+    ),
+  );
+  return (
+    returned &&
+    (ended.length < batches.length || (process.remaining || 0) > 0 || failed)
+  );
+}
+
 /** A complete Batch or Live run whose saved output is still intact. */
 export function canReapplyRun(job: Job) {
   return (
@@ -127,6 +162,7 @@ const statuses: Record<string, string> = {
   canceled: "Canceled",
   failed: "Failed",
   expired: "Expired",
+  abandoned: "Not collected",
   unknown: "Status unavailable",
 };
 export const batchStatus = (status: string) =>

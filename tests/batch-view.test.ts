@@ -5,6 +5,7 @@ import {
   batchCancellation,
   batchInProgress,
   batchProgress,
+  canAcceptResults,
   canRetrySaving,
   canReapplyRun,
   batchOutcome,
@@ -318,4 +319,40 @@ test("Progress offers cancel only for a Batch run whose provider work can stop",
   // A Live run has no provider Batch, and neither does no run at all.
   assert.equal(batchCancellation(run({ mode: "live" })).offer, false);
   assert.equal(batchCancellation(undefined).offer, false);
+});
+
+test("A Batch run offers accepting its results only when some finished and some did not", () => {
+  const done = {
+    id: "done",
+    status: "completed",
+    total: 2,
+    counts: { succeeded: 2 },
+  };
+  const busy = { id: "busy", status: "in_progress", total: 3, counts: {} };
+  const run = (batches: (typeof done)[], extra = {}) =>
+    ({
+      id: "run",
+      mode: "batch",
+      status: "running",
+      process: { batches, errors: [], ...extra },
+    }) as unknown as Job;
+  assert.equal(canAcceptResults(run([done, busy])), true);
+  // Every Batch ended with every request translated: the run saves itself.
+  assert.equal(canAcceptResults(run([done])), false);
+  // Requests never sent, or failed ones, are left out too.
+  assert.equal(canAcceptResults(run([done], { remaining: 4 })), true);
+  assert.equal(
+    canAcceptResults(run([{ ...done, counts: { succeeded: 1, errored: 1 } }])),
+    true,
+  );
+  // Nothing finished yet, or already accepted or collected.
+  assert.equal(canAcceptResults(run([busy])), false);
+  assert.equal(
+    canAcceptResults(run([done, busy], { resultsAccepted: true })),
+    false,
+  );
+  assert.equal(
+    canAcceptResults(run([done, busy], { resultsCollected: true })),
+    false,
+  );
 });

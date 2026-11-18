@@ -1,5 +1,9 @@
 import { useState, type ReactNode } from "react";
-import type { BatchCancellation, Job } from "../../api/contracts";
+import type {
+  BatchAcceptance,
+  BatchCancellation,
+  Job,
+} from "../../api/contracts";
 import { api } from "../../api/client";
 import { useApplication } from "../../app/ApplicationProvider";
 import { useAction } from "../../state/useAction";
@@ -15,7 +19,13 @@ import { JobStatus } from "../../ui/JobStatus";
 import { ProcessPanel, type RequestInspectionTarget } from "./ProcessPanel";
 import { InspectedFile } from "./InspectedFile";
 import { RunLog } from "./RunTechnical";
-import { batchOutcome, canRetrySaving, canReapplyRun } from "./batchView";
+import {
+  batchOutcome,
+  canAcceptResults,
+  canRetrySaving,
+  canReapplyRun,
+} from "./batchView";
+import { AcceptBatchResultsDialog } from "./AcceptBatchResults";
 import type { RequestBatch } from "./requestView";
 import { observedRun, reloadBeforeRunApply } from "./translationView";
 import { operationSummary } from "./historyView";
@@ -58,6 +68,7 @@ export function RunInspector({
   const [cancellation, setCancellation] = useState<BatchCancellation | null>(
     null,
   );
+  const [acceptance, setAcceptance] = useState<BatchAcceptance | null>(null);
   // A Plugin files apply is a record of its own, with no saved run to read.
   const jobId = summary?.action === "plugin_receipt" ? undefined : summary?.id;
   // The key is null without a job, so the read only runs with one. Observed
@@ -129,6 +140,7 @@ export function RunInspector({
       job.process?.batches?.some((batch) => batch.provider === "openrouter") &&
       (job.process?.remaining ?? 0) > 0;
     const collect = canRetrySaving(job) || !!job.process?.resultsUnavailable;
+    const accept = canAcceptResults(job);
     const reapplyVisible = job.status === "complete";
     return (
       <div className="inspector-batch-actions">
@@ -236,15 +248,34 @@ export function RunInspector({
               />
             </ActionRow>
           )}
+          {(accept || action.key === "accept") && (
+            <ActionRow label={<small>Results so far</small>}>
+              <ActionControl
+                label="Accept results"
+                variant="quiet"
+                disabled={action.busy || !accept}
+                {...feedback("accept", "Reading what finished…")}
+                onClick={() =>
+                  action.run(
+                    async () =>
+                      setAcceptance(
+                        await api.guided.batchAcceptPreview(projectId, job.id),
+                      ),
+                    "",
+                    "accept",
+                  )
+                }
+              />
+            </ActionRow>
+          )}
           {reapplyVisible && (
             <ActionRow label={<small>Saved output for this run</small>}>
               {reapplyControl("Reapply")}
             </ActionRow>
           )}
         </ActionList>
-        {action.key === "batch:confirm-cancel" && action.notice && (
-          <Feedback notice={action.notice} />
-        )}
+        {["batch:confirm-cancel", "batch:accept"].includes(action.key) &&
+          action.notice && <Feedback notice={action.notice} />}
       </div>
     );
   }
@@ -382,6 +413,14 @@ export function RunInspector({
           )}
         </DialogBody>
       </Modal>
+      {acceptance && (
+        <AcceptBatchResultsDialog
+          projectId={projectId}
+          value={acceptance}
+          action={action}
+          onClose={() => setAcceptance(null)}
+        />
+      )}
       {cancellation && (
         <Modal
           label="Cancel provider Batch"

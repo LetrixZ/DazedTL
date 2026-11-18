@@ -236,6 +236,9 @@ class RunProcess(TypedDict):
     noRequestFiles: NotRequired[list[str]]
     monitoring: NotRequired[BatchMonitoring]
     resultsCollected: NotRequired[bool]
+    # The user accepted the run's results so far; it saves what its ended
+    # Batches returned and leaves the rest untranslated.
+    resultsAccepted: NotRequired[bool]
     fileMetrics: NotRequired[dict[str, FileMetric]]
     mode: NotRequired[str]
     prepared: NotRequired[int]
@@ -325,6 +328,21 @@ class SettledEstimate(TypedDict):
 
 class ProviderDetails(TypedDict):
     batches: list[ProviderBatch]
+
+
+class BatchAcceptance(TypedDict):
+    """What accepting a Batch run's results so far covers, in requests."""
+
+    token: str
+    runId: str
+    files: int
+    returned: int
+    failed: int
+    pending: int
+    unsent: int
+    pendingBatches: int
+    # Whether the providers of the Batches still working stop them.
+    cancels: bool
 
 
 class BatchCancelRequested(TypedDict):

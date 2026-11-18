@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dazedtl.storage import write_json
 
-from .process_view import saved
+from .process_view import accepted, queue, saved
 from .provider_responses import provider_reason
 
 ARCHIVE = "dazedtl-batch-evidence.json"
@@ -96,7 +96,8 @@ def preserve(root, requests, results, state):
 
 def install(translation, root, plan):
     """Retains a Batch run's queue, results and state before the run clears
-    them, and reads a missing result's provider reason (provider_reason)."""
+    them, reads a missing result's provider reason (provider_reason), and
+    keeps the source text of an accepted run's missing results (`kept`)."""
     if plan.get("mode") != "batch" or plan.get("batch_link"):
         return
 
@@ -122,3 +123,25 @@ def install(translation, root, plan):
     translation.batch_failure_reason.layer(
         "batch-evidence", lambda _native, error: provider_reason(error)
     )
+    prepared = []
+
+    def kept(native, payload, language, cache_context=None, request_context=None):
+        """In a run whose results so far were accepted, a prepared request
+        with no result, unsent or in an abandoned Batch, keeps its lines'
+        source text, as a reply that fails validation does, so its file is
+        still saved; a request the run never prepared still stops it."""
+        try:
+            return native(payload, language, cache_context, request_context)
+        except translation.BatchResultUnavailableError:
+            if translation.get_batch_phase() != "consume" or not accepted(root):
+                raise
+            if not prepared:
+                prepared.append(set(queue(root)))
+            key = translation.get_cache_key(
+                payload, language, cache_context, request_context
+            )
+            if key not in prepared[0]:
+                raise
+            return {"text": ""}
+
+    translation.require_batch_result.layer("accepted-results", kept)

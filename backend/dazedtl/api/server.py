@@ -1064,6 +1064,14 @@ def routes(app):
             app.guided.batch_collect,
             lambda value, _params: views.job(value),
         ),
+        "guided_batch_accept_preview": (
+            app.guided.batch_accept_preview,
+            lambda value, _params: value,
+        ),
+        "guided_batch_accept": (
+            app.guided.batch_accept,
+            lambda value, _params: views.job(value),
+        ),
         "translation_speakers": (
             app.guided.speakers,
             lambda value, _params: views.speaker_scan(value),

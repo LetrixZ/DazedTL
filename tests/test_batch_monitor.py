@@ -517,6 +517,56 @@ class BatchMonitorTests(unittest.TestCase):
             provider.submit.assert_not_called()
             provider.live.assert_not_called()
 
+    def test_accepted_run_saves_its_results_so_far_without_waiting_or_sending(self):
+        # Accepting stops waiting for a Batch still working and for requests
+        # never sent: the run saves what ended, and sends nothing more.
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            monitor, job, _ = self.fixture(root)
+            batches = [
+                {"id": "paid", "provider": "openai", "custom_ids": {"one": "key"}},
+                {"id": "busy", "provider": "openai", "custom_ids": {"two": "late"}},
+            ]
+            write_json(root / "log/batch_history.json", {"batches": batches})
+            write_json(
+                root / "log/batch_state.json",
+                {"status": "partially_submitted", "batches": batches},
+            )
+            requests = read_json(root / "log/batch_requests.json")
+            requests["late"] = {"payload": '{"Line1":"剣"}', "params": {}}
+            write_json(root / "log/batch_requests.json", requests)
+            job.update(
+                dazedtl_approved=True,
+                dazedtl_batch_stopped=True,
+                files=["Map001.json"],
+            )
+            monitor.backend.manual.continue_batch = Mock()
+            provider = Mock()
+            provider.status.side_effect = lambda identity: {
+                "api_status": "completed" if identity == "paid" else "in_progress",
+                "counts": {"succeeded": 1},
+            }
+            provider.collect_terminal.return_value = ({"key": {"text": "ok"}}, [], {})
+            with patch.object(
+                batch_control, "TranslationProvider", return_value=provider
+            ):
+                monitor.tick()
+                # Without acceptance it keeps waiting for the working Batch.
+                self.assertEqual(monitor.views["run"]["state"], "monitoring")
+                monitor.backend.manual.consume_batch.assert_not_called()
+                job["dazedtl_batch_accepted"] = True
+                self.assertEqual(monitor.view("run"), monitor.views["run"])
+                monitor.views.pop("run")
+                self.assertEqual(monitor.view("run")["state"], "collecting")
+                monitor.tick()
+            monitor.backend.manual.consume_batch.assert_called_once_with("run")
+            monitor.backend.manual.continue_batch.assert_not_called()
+            provider.cancel.assert_called_once_with("busy")
+            provider.submit.assert_not_called()
+            provider.live.assert_not_called()
+            state = read_json(root / "log/batch_state.json")
+            self.assertEqual((state["status"], state["accepted"]), ("fetched", True))
+
     def test_approved_remainder_continues_once_but_stopped_or_superseded_runs_do_not(
         self,
     ):

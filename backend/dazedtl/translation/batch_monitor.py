@@ -9,7 +9,7 @@ from dazedtl.compatibility import batch_control
 from dazedtl.compatibility.batch_continuation import BatchContinuationError
 from dazedtl.compatibility.openrouter_batch import ResultsUnavailable
 from dazedtl.compatibility.preparations import temporary
-from dazedtl.compatibility.process_view import saved
+from dazedtl.compatibility.process_view import accepted, saved
 
 # Worker states after which this monitor finishes a run's saved Batches.
 ENDED = {"stopped", "interrupted", "failed", "canceled"}
@@ -20,6 +20,8 @@ class BatchMonitor:
         self.guided = guided
         self.backend = guided.backend
         self.stopping = threading.Event()
+        # Set to check every run now rather than at the next interval.
+        self.wake = threading.Event()
         self.worker = None
         self.busy = set()
         self.consumed = set()
@@ -37,13 +39,15 @@ class BatchMonitor:
         # An in-flight read may finish later, but cannot commit or launch work.
         with self.backend.lock:
             self.stopping.set()
+            self.wake.set()
         if self.worker:
             self.worker.join(timeout=1)
 
     def _run(self):
         while not self.stopping.is_set():
             self.tick()
-            self.stopping.wait(30)
+            self.wake.wait(30)
+            self.wake.clear()
 
     def tick(self):
         with self.backend.lock:
@@ -160,15 +164,20 @@ class BatchMonitor:
             history = saved(root, "batch_history.json").get("batches", [])
             # The saved receipts are read first: they rule out older runs
             # without reading their plans.
+            # A run whose results so far were accepted collects whatever
+            # its Batches and queue hold.
             collectable = (
                 bool(history)
-                and all(
-                    batch.get("api_status") in batch_control.TERMINAL
-                    for batch in history
+                and (
+                    bool(job.get("dazedtl_batch_accepted"))
+                    or all(
+                        batch.get("api_status") in batch_control.TERMINAL
+                        for batch in history
+                    )
+                    and not batch_control.unsent_requests(root)
                 )
                 and saved(root, "batch_state.json").get("status")
                 in {"submitted", "partially_submitted"}
-                and not batch_control.unsent_requests(root)
                 and not batch_control.no_successful_results(root)
                 and bool(self._owned(identity))
             )
@@ -222,13 +231,16 @@ class BatchMonitor:
             if batch_control.no_successful_results(root):
                 self._finish_empty(identity)
                 return
-            if identity in self.consumed and not batch_control.unsent_requests(root):
+            if identity in self.consumed and (
+                accepted(root) or not batch_control.unsent_requests(root)
+            ):
                 self.views[identity] = {
                     "state": "save_error",
                     "message": "Saving the collected responses did not finish. Review the run error, then retry saving results.",
                 }
                 return
             state = saved(root, "batch_state.json").get("status")
+            accepting = bool(job.get("dazedtl_batch_accepted"))
             if state not in {"submitted", "partially_submitted", "fetched"}:
                 self.views[identity] = {
                     "state": "blocked",
@@ -270,11 +282,25 @@ class BatchMonitor:
                     "batches": observed,
                     "checkedAt": datetime.now(UTC).isoformat(),
                 }
-            if pending:
+            if pending and not accepting:
                 return
-            batch_control.collect(
-                root, resolve, commit=lambda: self._commit(identity, plan)
-            )
+            try:
+                batch_control.collect(
+                    root,
+                    resolve,
+                    commit=lambda: self._commit(identity, plan),
+                    accept=accepting,
+                )
+            except ValueError as error:
+                if not accepting:
+                    raise
+                # Nothing to accept yet, as when no ended Batch returned a
+                # translation: the run goes back to waiting for its Batches.
+                with self._commit(identity, plan):
+                    job.pop("dazedtl_batch_accepted", None)
+                    self.backend.manual.save(job)
+                    self.views[identity] = {"state": "blocked", "message": str(error)}
+                return
         if (plan.get("dazedtl_request_policy") or {}).get("refusalRetry"):
             from dazedtl.compatibility.batch_refusals import advance_guided
 
@@ -317,7 +343,7 @@ class BatchMonitor:
                 self._finish_empty(identity)
                 return
             remaining = len(batch_control.unsent_requests(root))
-            if remaining:
+            if remaining and not accepted(root):
                 self.views[identity] = {
                     "state": "blocked",
                     "message": f"{remaining:,} requests were not submitted. Collected responses are retained; "

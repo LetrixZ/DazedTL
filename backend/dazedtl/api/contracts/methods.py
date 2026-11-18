@@ -68,6 +68,7 @@ from dazedtl.api.contracts.plugins import (
     PluginState,
 )
 from dazedtl.api.contracts.runs import (
+    BatchAcceptance,
     BatchCancellation,
     BatchCancelRequested,
     Job,
@@ -954,6 +955,10 @@ METHODS: dict[str, Method] = {
     ),
     "guided_batch_cancel": Method(TokenRequest, BatchCancelRequested),
     "guided_batch_collect": Method(RunRequest, Job),
+    # Saves a Batch run's results so far once reviewed; the rest stays
+    # untranslated and is never sent again automatically.
+    "guided_batch_accept_preview": Method(RunRequest, BatchAcceptance, refresh=False),
+    "guided_batch_accept": Method(TokenRequest, Job),
     "guided_form": Method(GuidedFormRequest, Saved, during_close=True),
     "guided_context_status": Method(GuidedContextStatusRequest, ContextSetup),
     "guided_context_review": Method(GuidedContextReviewRequest, Saved),

@@ -16,7 +16,17 @@ from dazedtl.freshness import Digests, signature, signature_settled
 from dazedtl.translation.files import digest, live_path, read_json
 
 # Provider Batch statuses after which a Batch takes no more work.
-BATCH_ENDED = {"completed", "ended", "failed", "expired", "cancelled", "canceled"}
+# "abandoned" is a Batch a run stopped waiting for when its user accepted the
+# results so far (batch_control abandon).
+BATCH_ENDED = {
+    "completed",
+    "ended",
+    "failed",
+    "expired",
+    "cancelled",
+    "canceled",
+    "abandoned",
+}
 
 # The engine's names pass translates the speakers of every file in one list and
 # records its requests under this name (engine util/speakers.NAMES_FILE).
@@ -504,6 +514,13 @@ def batch_results(root):
     return effective_results(
         root, saved(root, ARCHIVE).get("results", {}), current.get("results", current)
     )
+
+
+def accepted(root):
+    """Whether the user accepted this Batch run's results so far
+    (batch_control collect `accept`): its unsent and abandoned requests keep
+    their source text instead of failing their files."""
+    return bool(batch_state(root).get("accepted"))
 
 
 def batch_state(root):
@@ -1485,6 +1502,7 @@ def summary(root, job, view=None):
             and job.get("status") in {"stopped", "interrupted", "failed"}
         ),
         "resultsCollected": batch_state(root).get("status") == "fetched",
+        "resultsAccepted": bool(job.get("dazedtl_batch_accepted")),
         "sourceItems": sum(
             len(json.loads(entry["payload"])) for entry in requests.values()
         )

@@ -126,6 +126,8 @@ class Guided:
         self.batch_cancel_preview = self.inspection.batch_cancel_preview
         self.batch_cancel = self.inspection.batch_cancel
         self.batch_collect = self.inspection.batch_collect
+        self.batch_accept_preview = self.inspection.batch_accept_preview
+        self.batch_accept = self.inspection.batch_accept
         self.inspect = self.inspection.inspect
         self.release = GuidedRelease(self)
         self.form = self.release.form

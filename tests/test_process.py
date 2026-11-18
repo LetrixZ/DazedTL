@@ -2191,6 +2191,45 @@ class ProcessTests(unittest.TestCase):
             self.assertIsNone(payload["response"])
             self.assertEqual(payload["state"], "uncertain")
 
+    def test_an_accepted_run_keeps_source_text_only_for_its_prepared_requests(self):
+        # Accepting a run's results so far saves each file with the lines
+        # its unsent or abandoned requests hold in their original text; a
+        # request the run never prepared still stops the file.
+        from dazedtl.compatibility import batch_evidence
+
+        class Unavailable(RuntimeError):
+            pass
+
+        def missing(payload, *_args):
+            raise Unavailable(payload)
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            write_json(
+                root / "log/batch_requests.json",
+                {"prepared": {"payload": '{"Line1":"剣"}', "params": {}}},
+            )
+            state = {"status": "fetched", "batches": []}
+            write_json(root / "log/batch_state.json", state)
+            native = SimpleNamespace(
+                BATCH_QUEUE_FILE=root / "log/batch_requests.json",
+                _clear_run_batch_queue=point(lambda **_: None),
+                batch_failure_reason=point(lambda _error: None),
+                require_batch_result=point(missing),
+                BatchResultUnavailableError=Unavailable,
+                get_batch_phase=lambda: "consume",
+                get_cache_key=lambda payload, *_args: payload,
+            )
+            batch_evidence.install(native, root, {"mode": "batch"})
+            with self.assertRaises(Unavailable):
+                native.require_batch_result("prepared", "English")
+            write_json(root / "log/batch_state.json", {**state, "accepted": True})
+            self.assertEqual(
+                native.require_batch_result("prepared", "English"), {"text": ""}
+            )
+            with self.assertRaises(Unavailable):
+                native.require_batch_result("never prepared", "English")
+
     def test_batch_cleanup_preserves_exact_requests_responses_and_submission_mapping(
         self,
     ):
@@ -2240,6 +2279,7 @@ class ProcessTests(unittest.TestCase):
                     lambda **_: queue_file.unlink(missing_ok=True)
                 ),
                 batch_failure_reason=point(lambda _error: None),
+                require_batch_result=point(lambda *_args: None),
             )
             batch_evidence.install(native, root, {"mode": "translate"})
             with patch.object(batch_evidence, "preserve") as preserve:

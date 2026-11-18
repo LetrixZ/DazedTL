@@ -191,3 +191,105 @@ class BatchControlTests(unittest.TestCase):
             provider.submit.assert_not_called()
             provider.live.assert_not_called()
             provider.cancel.assert_not_called()
+
+    def test_accepting_results_so_far_saves_ended_batches_and_abandons_the_rest(
+        self,
+    ):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            batches = [
+                {"id": "done", "provider": "openai", "custom_ids": {"a": "key-a"}},
+                {"id": "busy", "provider": "openai", "custom_ids": {"b": "key-b"}},
+            ]
+            write_json(root / "log/batch_history.json", {"batches": batches})
+            write_json(
+                root / "log/batch_state.json",
+                {"status": "partially_submitted", "batches": batches},
+            )
+            write_json(
+                root / "log/batch_requests.json",
+                {
+                    key: {"payload": '{"Line1":"薬"}', "params": {}}
+                    for key in ("key-a", "key-b", "unsent")
+                },
+            )
+            provider = Mock()
+            provider.status.side_effect = lambda identity: {
+                "api_status": "completed" if identity == "done" else "in_progress",
+                "counts": {"succeeded": 1},
+            }
+            provider.collect_terminal.return_value = (
+                {"key-a": {"text": '{"Line1":"Medicine"}'}},
+                [],
+                {},
+            )
+            resolve = lambda _: {
+                "secret": "fixture",
+                "endpoint": "https://fixture.invalid",
+                "organization": "",
+            }
+            with patch.object(
+                batch_control, "TranslationProvider", return_value=provider
+            ):
+                with self.assertRaisesRegex(ValueError, "still working"):
+                    batch_control.collect(root, resolve)
+                self.assertEqual(
+                    batch_control.collect(root, resolve, accept=True)["received"], 1
+                )
+            # The working Batch is cancelled once and never read; the unsent
+            # request no longer holds the run back, and nothing is sent.
+            provider.cancel.assert_called_once_with("busy")
+            self.assertEqual(
+                {call.args[0] for call in provider.collect_terminal.call_args_list},
+                {"done"},
+            )
+            provider.submit.assert_not_called()
+            self.assertTrue(process_view.accepted(root))
+            batch_control.require_complete_submission(root)
+            busy = read_json(root / "log/batch_history.json")["batches"][1]
+            self.assertEqual(busy["api_status"], "abandoned")
+            self.assertEqual(busy["request_counts"]["succeeded"], 0)
+            self.assertEqual(
+                busy["provider_errors"],
+                [{"custom_id": "b", "message": batch_control.ABANDONED}],
+            )
+            self.assertEqual(
+                read_json(root / "log/batch_results.json"),
+                {"key-a": {"text": '{"Line1":"Medicine"}'}},
+            )
+
+    def test_accepting_refuses_until_an_ended_batch_returned_translations(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch = {"id": "busy", "provider": "openrouter", "custom_ids": {"b": "k"}}
+            write_json(root / "log/batch_history.json", {"batches": [batch]})
+            write_json(
+                root / "log/batch_state.json",
+                {"status": "submitted", "batches": [batch]},
+            )
+            write_json(
+                root / "log/batch_requests.json",
+                {"k": {"payload": '{"Line1":"薬"}', "params": {}}},
+            )
+            frozen = {
+                path: path.read_bytes() for path in root.rglob("*") if path.is_file()
+            }
+            provider = Mock()
+            provider.status.return_value = {"api_status": "in_progress"}
+            with (
+                patch.object(
+                    batch_control, "TranslationProvider", return_value=provider
+                ),
+                self.assertRaisesRegex(ValueError, "No finished Batch"),
+            ):
+                batch_control.collect(
+                    root,
+                    lambda _: {"secret": "", "endpoint": "", "organization": ""},
+                    accept=True,
+                )
+            # OpenRouter cannot cancel, and nothing is saved.
+            provider.cancel.assert_not_called()
+            self.assertEqual(
+                frozen,
+                {path: path.read_bytes() for path in root.rglob("*") if path.is_file()},
+            )
