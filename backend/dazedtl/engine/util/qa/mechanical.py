@@ -15,6 +15,7 @@ from collections import Counter
 from typing import Any
 
 from util import rpgmaker_blocks as blocks
+from util.runtime_text import text_code_shells
 from util.source_text import source_left
 
 _RUNTIME_TOKEN_RE = re.compile(
@@ -127,12 +128,15 @@ def _masked(text: str) -> bool:
 
 def row_codes(text: str):
     """*text*'s runtime codes counted per row (see rpgmaker_blocks.row_codes)."""
-    return blocks.row_codes(text, _RUNTIME_TOKEN_RE)
+    return blocks.row_codes(text_code_shells(text), _RUNTIME_TOKEN_RE)
 
 
 def _runtime_tokens_match(source: str, live: str) -> bool:
     """Whether *live* keeps *source*'s runtime codes. A row wrapping adds may
-    repeat the codes its row starts with; any other change still counts."""
+    repeat the codes its row starts with; any other change still counts.
+    A text code's argument is translated, so its shell is the code
+    (util/runtime_text TEXT_CODE)."""
+    source, live = text_code_shells(source), text_code_shells(live)
     if Counter(_RUNTIME_TOKEN_RE.findall(source)) == Counter(
         _RUNTIME_TOKEN_RE.findall(live)
     ):
@@ -143,13 +147,14 @@ def _runtime_tokens_match(source: str, live: str) -> bool:
 def evidence(source: str, live: str, code: int | None) -> dict[str, Any]:
     """The flags, runtime codes and visible numbers of a line's source and
     live text."""
-    source_tokens = _RUNTIME_TOKEN_RE.findall(source)
-    live_tokens = _RUNTIME_TOKEN_RE.findall(live)
+    source_shells, live_shells = text_code_shells(source), text_code_shells(live)
+    source_tokens = _RUNTIME_TOKEN_RE.findall(source_shells)
+    live_tokens = _RUNTIME_TOKEN_RE.findall(live_shells)
     source_visible = unicodedata.normalize(
-        "NFKC", _RUNTIME_TOKEN_RE.sub(" ", source)
+        "NFKC", _RUNTIME_TOKEN_RE.sub(" ", source_shells)
     )
     live_visible = unicodedata.normalize(
-        "NFKC", _RUNTIME_TOKEN_RE.sub(" ", live)
+        "NFKC", _RUNTIME_TOKEN_RE.sub(" ", live_shells)
     )
     source_numbers = [_number(n) for n in _VISIBLE_NUMBER_RE.findall(source_visible)]
     live_numbers = [_number(n) for n in _VISIBLE_NUMBER_RE.findall(live_visible)]

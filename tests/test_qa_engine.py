@@ -453,6 +453,20 @@ class QAEngineTests(unittest.TestCase):
         source, live = "\\SA[びっくり]えっ、本当に？", "\\SA[びっくり]Huh, really?"
         evidence = manifest.mechanical.evidence(source, live, 401)
         self.assertNotIn("source-language-residue", evidence["flags"])
+        # A text code's argument is text: QA apply refused translating an
+        # \EC[...] emphasis payload as a runtime-token change, and read the
+        # Japanese left in it as finished.
+        source = "「\\EC[恋愛感情って？]」"
+        for live, flags in (
+            ('"\\EC[Where does love happen?]"', []),
+            ('"\\EC[Where does]\n\\EC[love happen?]"', []),
+            ('"\\EC[恋愛感情って？]"', ["source-language-residue"]),
+            ('"Where does love happen?"', ["runtime-token-mismatch"]),
+        ):
+            self.assertEqual(
+                manifest.mechanical.evidence(source, live, None)["flags"], flags, live
+            )
+        source, live = "\\SA[びっくり]えっ、本当に？", "\\SA[びっくり]Huh, really?"
         with tempfile.TemporaryDirectory() as folder:
             data = Path(folder)
             commands = [

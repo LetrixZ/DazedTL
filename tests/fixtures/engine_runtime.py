@@ -5020,6 +5020,41 @@ try:
         for ruby in (r"「\rb[魔王,まおう]！」", r"\\R[魔王,まおう]", "{魔王|まおう}！"):
             assert holds_source(ruby), ruby
         assert not holds_source(r"\rb[Demon King,まおう]!")
+        # So is a text code's argument (util/runtime_text TEXT_CODE): a
+        # release kept \EC[...] emphasis payloads in Japanese, locked as codes.
+        assert holds_source(r"「\EC[心]」") and not holds_source(r"\EC[mind]")
+        from util.dazedwrap import wrapShaped
+        from util.runtime_text import (
+            protect_script_codes,
+            restore_script_codes,
+            validate_control_codes,
+            validate_unmasked_control_codes,
+        )
+
+        source = r"「\EC[恋愛感情って、身体のどこで？]」\C[2]心\C[0]"
+        protected, codes = protect_script_codes(source)
+        assert "恋愛感情" in protected and r"\EC" not in protected, protected
+        english = r"\EC[Where in the body does romantic love actually happen?]"
+        translated = restore_script_codes(
+            protected.replace("恋愛感情って、身体のどこで？", english[4:-1]).replace(
+                "心", "mind"
+            ),
+            codes,
+        )
+        assert validate_control_codes([source], [translated], {0: codes})[0], translated
+        assert validate_unmasked_control_codes(source, translated)[0]
+        # The plugin reads /^\[(.+?)\]/: the game stops on an empty span.
+        assert not validate_control_codes(
+            [source], [r"「\EC[]」\C[2]mind\C[0]"], {0: codes}
+        )[0]
+        # A wrapped span breaks into one span per row, never inside one.
+        wrapped = wrapShaped(english + " she whispered softly.", 24, target="English")
+        assert wrapped.count(r"\EC[") == 3, wrapped
+        for row in wrapped.split("\n"):
+            assert row.count("[") == row.count("]"), wrapped
+        assert validate_unmasked_control_codes(
+            source, translated.replace(english, wrapped)
+        )[0]
         # Other scripts and private-use icon glyphs are not Japanese.
         assert not holds_source("안녕  ꞌ")
         # A name box counts the name the engine translates, not what follows.

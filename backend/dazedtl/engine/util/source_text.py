@@ -11,8 +11,10 @@ letters: a translation keeps 【】 labels and 「」, and a game writes its own
 English inside them, such as "【Saving beforehand is recommended】", so text
 holding only those reads finished. A control code's argument, such as
 \\SA[びっくり] or \\fn[和風], names a plugin's asset or setting, never text,
-so a translation that keeps one reads finished too. Furigana is the exception:
-its base is text the player reads, so \\rb[魔王,まおう] holds Japanese.
+so a translation that keeps one reads finished too. Furigana and text codes
+are the exceptions: furigana's base and a text code's argument
+(util/runtime_text TEXT_CODE) are text the player reads, so \\rb[魔王,まおう]
+and \\EC[心] hold Japanese.
 
 English to translate is a Latin letter outside control codes, markup tags
 such as <br> and {name} placeholders.
@@ -37,7 +39,7 @@ from functools import lru_cache
 
 from util import languages
 from util.languages import ENGLISH, JAPANESE, KANJI
-from util.runtime_text import without_control_codes, without_protected_codes
+from util.runtime_text import code_text, without_control_codes, without_protected_codes
 
 # Japanese letters (util/languages JAPANESE_LETTERS).
 LETTERS = re.compile(f"[{languages.JAPANESE_LETTERS}]")
@@ -180,10 +182,11 @@ def _left(runs: list[str], spoken: str, source: str, language: str) -> list[str]
 
 
 def _spoken(text: str, language: str) -> str:
-    """*text* as the player reads it: furigana as its base, without control
+    """*text* as the player reads it: furigana as its base, a text code as
+    its argument, without control
     codes, other protected codes or their placeholders in a request, and
     for a Latin source without markup tags and {name} placeholders."""
-    text = without_control_codes(without_protected_codes(furigana_base(text)))
+    text = without_control_codes(without_protected_codes(code_text(furigana_base(text))))
     return _MARKUP.sub("", text) if language != JAPANESE else text
 
 

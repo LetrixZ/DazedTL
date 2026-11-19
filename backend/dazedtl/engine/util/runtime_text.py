@@ -41,6 +41,79 @@ PROTECTED_PATTERNS = [
 _CONTROL_CODE_RE = re.compile(_GENERAL_CONTROL_PATTERN)
 _ORPHAN_BACKSLASH_RE = re.compile(r'^[\\]+$')
 
+# A code whose argument is text the player reads, drawn with a mark:
+# CombineCharacterEC's emphasis dots \EC[text], handakuten \PS[text],
+# strikethroughs \AT[text] and \WAT[text] and underline \UL[text]. Its
+# shell (\EC[ and ]) is a code, its argument is translated. The plugin reads
+# the argument as /^\[(.+?)\]/, so the argument is never empty and never
+# holds a ] or a row break; RPG Maker reads the code's name in any case.
+# (\VS[text] shares its name with a voice code, an asset, so it stays one.)
+TEXT_CODE = re.compile(r"([\\]+(?:EC|PS|AT|WAT|UL)\[)([^\]\r\n]*)(\])", re.IGNORECASE)
+# Two spans of one text code that a single space separates, which a row
+# draws as one span.
+_TEXT_CODE_PAIR = re.compile(
+    r"(?P<open>[\\]+(?:EC|PS|AT|WAT|UL)\[)(?P<text>[^\]\r\n]*)\] (?P=open)",
+    re.IGNORECASE,
+)
+
+
+def code_text(text):
+    """*text* with each text code (TEXT_CODE) replaced by its argument, the
+    text the player reads."""
+    text = str(text)
+    return TEXT_CODE.sub(r"\2", text) if "\\" in text else text
+
+
+def text_code_shells(text):
+    """*text* with each text code (TEXT_CODE) written as its shell, \\EC[],
+    followed by its argument, so code checks compare the shells while the
+    argument is translated like the text around it. Spans of one code that
+    only spaces or row breaks separate count as one, as they draw."""
+    text = str(text)
+    if "\\" not in text:
+        return text
+    parts, end, shell = [], 0, None
+    for match in TEXT_CODE.finditer(text):
+        between = text[end:match.start()]
+        same = shell == match.group(1) and not between.strip()
+        parts += [between, "" if same else match.group(1) + match.group(3), f" {match.group(2)} "]
+        end, shell = match.end(), match.group(1)
+    return "".join(parts) + text[end:]
+
+
+def joined_text_codes(text):
+    """*text* with spans of one text code that a single space separates
+    written as one span, as a wrapped line writes the words of a span that
+    share a row."""
+    text = str(text)
+    joined = None
+    while "\\" in text and joined != text:
+        joined = text
+        text = _TEXT_CODE_PAIR.sub(r"\g<open>\g<text> ", text)
+    return text
+
+
+def split_text_codes(text):
+    """*text* with each text code holding several words written as one span
+    per word, so text that breaks at its spaces can break between them;
+    joined_text_codes writes the ones a row keeps together as one again."""
+    if "\\" not in str(text):
+        return str(text)
+
+    def per_word(match):
+        words = match.group(2).split()
+        if len(words) < 2:
+            return match.group(0)
+        return " ".join(match.group(1) + word + match.group(3) for word in words)
+
+    return TEXT_CODE.sub(per_word, str(text))
+
+
+def empty_text_codes(text):
+    """The text codes in *text* with no argument to draw, which the plugin
+    cannot read: the game stops on them."""
+    return [match.group(0) for match in TEXT_CODE.finditer(str(text)) if not match.group(2).strip()]
+
 # The placeholder protect_script_codes puts in a protected code's place.
 _PLACEHOLDER = "__PROTECTED_{}__"
 _PROTECTED_RE = re.compile('|'.join(f'({pattern})' for pattern in PROTECTED_PATTERNS))
@@ -81,7 +154,7 @@ def extract_control_codes(text):
 def without_protected_codes(text):
     """Return text without the codes protect_script_codes protects, or the
     placeholders a protected request holds in their place."""
-    return _PROTECTED_OR_PLACEHOLDER_RE.sub("", str(text))
+    return _PROTECTED_OR_PLACEHOLDER_RE.sub("", code_text(text))
 
 
 def split_protected_codes(text):
@@ -184,6 +257,12 @@ def validate_control_codes(original_items, translated_items, replacements_by_lin
             if replacements_by_line
             else {}
         )
+        emptied = Counter(empty_text_codes(translated)) - Counter(empty_text_codes(original))
+        if emptied:
+            errors.append(f"Line{index}: text code with nothing to draw {list(emptied.elements())}")
+            continue
+        # A text code's argument is translated: its shell is the code.
+        original, translated = text_code_shells(original), text_code_shells(translated)
         source_text, source_mapping_missing = _mask_mapped_control_codes(
             original, replacements
         )
@@ -251,7 +330,7 @@ def validate_unmasked_control_codes(source, translated):
         # translation adds is an extra code.
         source = RUBY.sub(" ", source)
         translated = RUBY.sub(" ", translated, count=rubies)
-    codes = split_protected_codes(source)[1::2]
+    codes = split_protected_codes(text_code_shells(source))[1::2]
     return validate_control_codes(
         source,
         translated,
@@ -296,14 +375,24 @@ def protect_script_codes(text):
     protected_text = text
     counter = 0
 
-    def replace_match(match):
+    def placeholder_for(original):
         nonlocal counter
-        original = match.group(0)
-        # Create a unique placeholder that won't be translated
         placeholder = _PLACEHOLDER.format(counter)
         replacements[placeholder] = original
         counter += 1
         return placeholder
+
+    def replace_match(match):
+        # A text code's argument is translated between placeholders for its
+        # shell.
+        text_code = TEXT_CODE.fullmatch(match.group(0))
+        if text_code:
+            return (
+                placeholder_for(text_code.group(1))
+                + text_code.group(2)
+                + placeholder_for(text_code.group(3))
+            )
+        return placeholder_for(match.group(0))
 
     protected_text = _PROTECTED_RE.sub(replace_match, protected_text)
 

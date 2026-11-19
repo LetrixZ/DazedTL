@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from util.languages import target_uses_cjk
+from util.runtime_text import code_text, joined_text_codes, split_text_codes
 
 # Wolf / RPG Maker inline codes that do not occupy visible box width.
 _WOLF_INLINE_VISIBLE_STRIP = re.compile(
@@ -44,7 +45,8 @@ def visible_text(text: str) -> str:
     """
     if not text:
         return ""
-    cleaned = _WOLF_INLINE_VISIBLE_STRIP.sub("", text)
+    # A text code draws its argument (util/runtime_text TEXT_CODE).
+    cleaned = _WOLF_INLINE_VISIBLE_STRIP.sub("", code_text(text))
     cleaned = _WOLF_CODE_PLACEHOLDER.sub("", cleaned)
     cleaned = re.sub(r"[\\]+[cC]\[\d+\]", "", cleaned)
     cleaned = re.sub(r"[\\]+[fF](?:\[\d+\])?", "", cleaned)
@@ -170,9 +172,13 @@ class Words:
     gaps: list[int]
 
     def line(self, start: int, end: int) -> str:
-        """``words[start:end]`` written on one line."""
-        return self.words[start] + "".join(
-            self.spaces[index] + self.words[index] for index in range(start + 1, end)
+        """``words[start:end]`` written on one line, the words of a text
+        code's span that share it as one span again (see :func:`_words`)."""
+        return joined_text_codes(
+            self.words[start]
+            + "".join(
+                self.spaces[index] + self.words[index] for index in range(start + 1, end)
+            )
         )
 
     def part(self, start: int, end: int) -> "Words":
@@ -190,7 +196,9 @@ def _words(text: str, measure, characters: bool, glue=None) -> Words:
     *measure* counts it; between characters when *characters*, where a piece
     the pattern *glue* matches at its start stays with the one before."""
     if not characters:
-        words = text.split()
+        # A text code's span breaks between its words as one span per word,
+        # never inside a span: the plugin cannot read a row break in one.
+        words = split_text_codes(text).split()
         joins = max(0, len(words) - 1)
         return Words(
             words,
@@ -324,7 +332,7 @@ def one_line(text: str, target=None) -> str:
 
 def _one_line(text: str, characters: bool) -> str:
     if not characters:
-        return text.replace("\n", " ")
+        return joined_text_codes(text.replace("\n", " "))
     words = _words(text, len, True)
     return words.line(0, len(words.words)) if words.words else ""
 
@@ -445,7 +453,7 @@ _SOURCE_BLANK = " \t　"
 
 
 def _word_end(word: str) -> str:
-    return _TRAILING_CODES.sub("", word)
+    return _TRAILING_CODES.sub("", code_text(word))
 
 
 def _break_kind(words: list[str], end: int, characters: bool = False) -> str:
@@ -453,7 +461,7 @@ def _break_kind(words: list[str], end: int, characters: bool = False) -> str:
     before a list item, after a clause, or inside a sentence: between words,
     or for text that breaks between characters inside a word (see
     :func:`_phrase_break`)."""
-    head = _LEADING_CODES.sub("", words[end]) if end < len(words) else ""
+    head = _LEADING_CODES.sub("", code_text(words[end])) if end < len(words) else ""
     if ITEM_START.match(head):
         return "sentence"
     tail = _word_end(words[end - 1])
