@@ -254,6 +254,7 @@ Look for these indicator files in the game folder:
 | `Scene.pck` + `Gameexe.dat` + `SiglusEngine.exe` | **Siglus** | `engine-vn-engines.md` | Binary patch Scene.pck + exe + g00 |
 | `*.ypf` / `*.ystb` | **YU-RIS** | `engine-vn-engines.md` | YPF/YSTB extract/repack |
 | `resources/app.asar` or `app/` + `data/scenario/*.ks` | **TyranoScript/Builder** | **`engine-tyranoscript.md`** | Build-dependent loose override or verified ASAR installer |
+| `renpy/` + `game/*.rpy` / `*.rpyc` / `*.rpa` | **Ren'Py** | `engine-vn-engines.md` | Statements and screen strings, then the string tables |
 | `*.pck` (Godot) | **Godot** | `engine-vn-engines.md` | PCK extract/repack |
 | DXA archive + vertical-text images | **Trois** | `engine-vn-engines.md` | Loose-file override + font trick |
 | `*.rpgproject` / `*.rmmzproject` / `.rpgmvp` / `.png_` | **RPG Maker MV/MZ (encrypted)** | `engine-rpgmaker.md` | Decrypt then loose `data/` |

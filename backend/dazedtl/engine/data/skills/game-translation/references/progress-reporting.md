@@ -40,6 +40,21 @@ report template in the pipeline if needed, updating phase states as work advance
   `patch`, or null when no phase is active. This is the last reported activity, not a claim
   that a process is currently running.
   The phase it names must be active or blocked, so once every phase is done, leave `phase` out.
+
+The final report, once the patch is packaged, still names the text export, since a translation counts complete only with a known total all translated:
+
+```json
+{
+  "phases": {"preparation": "complete", "extraction": "complete", "translation": "complete",
+             "images": "complete", "injection": "complete", "qa": "complete", "patch": "complete"},
+  "text": ".dazedtl/len-method/work/text-units.json",
+  "images": ".dazedtl/len-method/work/image-units.json",
+  "inputs": [".dazedtl/len-method/work/source-manifest.json"],
+  "blocker": "",
+  "next_action": ""
+}
+```
+
 - `phases`: those same keys with `pending`, `active`, `complete`, `blocked`, or
   `out_of_scope`. Several phases can be active when work overlaps; `phase` identifies the current focus and defaults to active.
   Set later phases out of scope only for an explicit preparation-only request. Mark QA/playtesting and

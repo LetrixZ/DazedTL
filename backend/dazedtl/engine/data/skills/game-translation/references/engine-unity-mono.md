@@ -201,6 +201,23 @@ at `tools/Text Fitting/layout.py`. Auto-sizing
 (`tools/Unity BepInEx Text Layout Plugin`) is the fallback for the
 long tail of individually-sized widgets, not the fix for dialogue.
 
+## Images held in `.assets` and `.resS`
+
+The Images steps read and write loose PNGs, so for Unity they run on the folder you exported the textures to (`images --scan --root <folder>`).
+The game never reads that folder: an image Images reports applied is in the folder only, and its `install` says so, until you write it back into the serialized file the game loads.
+
+- Write only the pixels.
+  A `Texture2D` whose `m_StreamData` names a `.resS` file keeps its pixels at that offset and size: encode the edit in the texture's own format and size and write those bytes at that offset, leaving every other byte alone.
+- Never save a whole serialized file you loaded to change one object.
+  In Kono Mesugaki Kakugou Shiro, saving `sharedassets*.assets` with UnityPy wrote every unchanged object back empty, and the file fell from 4.18 MB to 547 KB.
+- Read back what you wrote: load the file again, decode the texture, compare it with the edit, and compare every other object with the original's.
+- Pack the written files into the patch's runtime manifest, and check each image in the game before you package.
+
+## Game updates: keep unit IDs stable
+
+organize reuses an earlier translation only for a unit whose ID and source text are both unchanged (`direct-workflow.md`).
+Unity path IDs and CSV row numbers shift between releases, so build unit IDs from what stays: the asset or table name with the row's own key or field, never a path ID or row number.
+
 ## Step 8 - ship it: a build for players, not for you
 
 The dev install logs everything on purpose. A release must not, or the first thing

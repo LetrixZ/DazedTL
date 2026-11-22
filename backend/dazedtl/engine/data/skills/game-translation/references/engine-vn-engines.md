@@ -1,4 +1,4 @@
-# VN & Misc Engines (KiriKiri, Siglus, YU-RIS, TyranoScript, Trois, Godot, Electron, LiveMaker)
+# VN & Misc Engines (KiriKiri, Siglus, YU-RIS, TyranoScript, Trois, Ren'Py, Godot, Electron, LiveMaker)
 
 Grouped because each is a smaller, archive-centric pipeline: **unpack archive → extract/translate script text → repack (or loose-file override) → patch UI images + exe strings**. Archive tools live in `tools/Game Archives/` and `tools/C++/`.
 
@@ -46,6 +46,17 @@ summary below is only enough to recognise the engine.
   - Body text color is per-language in `message.pixsettings`. The English slot may be hardcoded black → override to white.
   - Parser requires **CRLF** line endings.
 - **Flow:** loose-file override next to a patched launcher (loose files take priority over `pix.bin`/archives). Translate scripts + system images. Build the zero-width-U+3000 font.
+
+## Ren'Py (`game/*.rpy`, `*.rpyc`, `*.rpa`)
+
+- **Indicators:** a `renpy/` folder beside `game/`, which holds `.rpy` scripts, their compiled `.rpyc`, or `.rpa` archives of either.
+  `renpy/` itself is the engine's: leave it alone.
+- **Census:** DazedTL reads loose `.rpy` scripts. A game shipping only `.rpyc` or `.rpa` needs your decoded dump (`census --decoded`), and the census asks for it.
+- **Extract two layers.** Say and menu statements are one; screen language is the other: preferences labels, help tabs, file-slot text and other screen strings sit in screen definitions as keyword arguments, such as `text`, `textbutton`, `label` and `tooltip`, which a walk of the statements misses.
+  In Kuri-seme Shoujo, organize read as complete while those screens were never extracted; a scan of the compiled AST for every string constant found 31 strings players read.
+- **Inject, then check the string tables.** Ren'Py looks a shown string up in the active language's string table (`translate <language> strings:`, `old`/`new`).
+  In Kuri-seme Shoujo, the default language's table turned the injected English back into Japanese until its entries were rewritten to map each injected string to itself, so read every screen in the game after injecting.
+- **Fit:** measure the dialogue window's width from the game's `gui.rpy` or screens before wrapping, as `text-fitting.md` says.
 
 ## Godot (`*.pck`)
 
