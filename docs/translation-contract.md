@@ -75,7 +75,7 @@ Scope is mechanical: DazedTL counts the original game's Japanese text itself, fr
 `census` saves that count, and [census.py](../backend/dazedtl/translation/census.py) holds its readers, rules and coverage.
 
 - It reads RPG Maker data and the plugins a game loads, JavaScript, KAG/Tyrano and Ren'Py scripts, decompiled YU-RIS scripts, HTML, text and YAML, and opens RGSS, asar, unencrypted xp3 and Wolf archives.
-  For containers it can't open, such as Unity, Unreal or encrypted archives, `census --decoded` reads a folder Len's decoder wrote.
+  For containers it can't open, such as Unity, Unreal, compiled Ren'Py or encrypted archives, `census --decoded` reads a decoded folder.
 - Coverage counts Japanese runs by occurrence: each must be in a unit, be a term of the game's glossary, or be set aside by a rule.
 - Built-in rules set aside text players never see, such as comments, labels, asset names and readmes; comment lines a game's plugins show players, such as MPP_ChoiceEX's choice help, are player text ([rpgmaker_markers](../backend/dazedtl/engine/util/rpgmaker_markers.py)).
 - The assistant can add rules in `.dazedtl/len-method/work/scope-rules.json`: version 1, with rules of `kind`, `field` and `reason` (asset_name, identifier, comment, script_code, not_displayed or other_language), each optionally limited to a `file` pattern or exact `values`.

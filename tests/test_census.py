@@ -818,6 +818,41 @@ class CensusTests(unittest.TestCase):
         )
         self.assertTrue(dumped["decoded"])
 
+    def test_compiled_scripts_and_assemblies_need_the_assistants_dump(self):
+        # A Ren'Py game shipping only compiled scripts read as covered with
+        # nothing in it, and a Unity game's literals in its assembly and
+        # scenes stayed outside the census without a word.
+        renpy = scan(
+            {
+                "game/script.rpyc": b"\0",
+                "game/archive.rpa": b"\0",
+                "renpy/common/00start.rpyc": b"\0",
+            }
+        )
+        self.assertEqual(renpy["needs_dump"], ["game/archive.rpa", "game/script.rpyc"])
+        # Scripts beside their compiled forms are read; an archive beside
+        # them holds pictures and sound.
+        loose = scan(
+            {
+                "game/script.rpy": "e 「はい。」\n".encode(),
+                "game/script.rpyc": b"\0",
+                "game/images.rpa": b"\0",
+            }
+        )
+        self.assertEqual(loose["needs_dump"], [])
+        unity = scan(
+            {
+                "Game_Data/Managed/Assembly-CSharp.dll": b"MZ",
+                "Game_Data/Managed/UnityEngine.dll": b"MZ",
+                "Game_Data/level0": b"\0",
+                "Game_Data/level0.resS": b"\0",
+            }
+        )
+        self.assertEqual(
+            unity["needs_dump"],
+            ["Game_Data/Managed/Assembly-CSharp.dll", "Game_Data/level0"],
+        )
+
     def test_decoded_scripts_take_rules_and_other_languages_are_set_aside(self):
         # YU-RIS media archives hold no text, so only scripts need decoding.
         names = ["pac/ysbin.ypf", "pac/bgm.ypf", "pac/old.ypf", "data/yst00001.ybn"]

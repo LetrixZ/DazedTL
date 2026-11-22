@@ -120,6 +120,33 @@ SKIPPED_DIRS = {".git", ".dazedtl", "save", "saves", "locales", "swiftshader"}
 TOOL_DIRS = {"bepinex", "melonloader", "monobleedingedge"}
 
 
+def compiled_only(names):
+    """The files of *names* whose text only a decoded dump holds, though no
+    extension says so: a Ren'Py game's compiled scripts without the script
+    beside them, its archives when it ships no script at all, and a Unity
+    game's script assembly and scenes, which hold strings players read.
+    Ren'Py's own scripts, in its renpy folder, are the engine's."""
+    names = [
+        name
+        for name in names
+        if "renpy" not in PurePosixPath(name.casefold()).parts[:-1]
+    ]
+    scripts = {name.casefold() for name in names if name.casefold().endswith(".rpy")}
+    found = []
+    for name in names:
+        lowered = name.casefold()
+        path = PurePosixPath(lowered)
+        data = len(path.parts) > 1 and path.parts[-2].endswith("_data")
+        if (
+            (lowered.endswith(".rpyc") and lowered[:-1] not in scripts)
+            or (lowered.endswith(".rpa") and not scripts)
+            or lowered.endswith("_data/managed/assembly-csharp.dll")
+            or (data and re.fullmatch(r"level\d+", path.name))
+        ):
+            found.append(name)
+    return set(found)
+
+
 def candidate(name, head=None):
     """How the census treats a game file: 'read', 'open', 'index', 'wolf',
     'dump' or None. head(name, size) -> the file's first bytes tells a
@@ -1606,11 +1633,12 @@ def scan(
             found.extend(entries(rows, name, source, language))
             unsent.extend(entries(rows, name, source, language, marks))
 
+    compiled = compiled_only(names)
     for count, name in enumerate(names, 1):
         how = candidate(name, head)
         if count % 500 == 0:
             progress(f"Read {count:,} of {len(names):,} files")
-        if how == "dump":
+        if how == "dump" or name in compiled:
             needs_dump.append(name)
         elif how == "index":
             try:
