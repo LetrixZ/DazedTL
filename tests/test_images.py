@@ -722,6 +722,8 @@ class ImageTests(unittest.TestCase):
         )
         step = self.service.assistant(self.identity, "apply")
         self.assertEqual((step["next"], step["applied"]), ("done", []))
+        # The game reads its img folder, so nothing is left to install.
+        self.assertNotIn("install", step)
         self.assertEqual((self.game / "img/A.png").read_bytes(), candidate)
         # The skipped image stays out of the records; the applied one counts
         # from its preserved original.
@@ -1614,6 +1616,13 @@ class DecodedImagePatchTests(unittest.TestCase):
         candidate = self.reviewed_candidate(picture)
         step = self.service.assistant(self.identity, "apply")
         self.assertEqual((step["next"], step["applied"]), ("done", [picture]))
+        # Applied into a folder the game never reads, it still has to be
+        # packed, which the step and the status after it name with the
+        # folder, where "done" alone read as delivered.
+        self.assertIn("decoded", step["install"])
+        self.assertEqual(
+            self.service.assistant(self.identity, "status")["install"], step["install"]
+        )
         # The branch keeps it, so checkpoints restore it.
         self.assertEqual(self.git("show", "HEAD:" + picture), candidate)
         self.assertIn(

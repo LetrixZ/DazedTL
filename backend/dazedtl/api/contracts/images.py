@@ -548,3 +548,6 @@ class ImageAssistantStepResult(TypedDict):
     task: str
     report: str
     applied: list[str]
+    # What reaches the game only once the assistant packs it: applied images
+    # in a folder decoded from the game's archives.
+    install: NotRequired[str]

@@ -2884,6 +2884,7 @@ export type ImageAssistantStepResult = {
   task: string;
   report: string;
   applied: string[];
+  install?: string;
 };
 
 export type PluginFileReview = {

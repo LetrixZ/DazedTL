@@ -1581,6 +1581,16 @@ class ImageService:
         if result:
             view["applied"] = list(result.get("patch_files", []))
             view["problems"].extend(result.get("errors", []))
+        if profile.get("decoded") and counts["selectedApplied"]:
+            # The game reads the archives the folder was decoded from, never
+            # the folder, so an applied image there reaches no player until
+            # the assistant packs it: "done" alone read as delivered.
+            view["install"] = (
+                f"The applied images are in {profile['imageRoot']}, a folder the game "
+                "doesn't read and DazedTL leaves out of the patch: pack them into an "
+                "archive the game loads, add it to the runtime manifest and check "
+                "them in the game."
+            )
         return view
 
     def _stop_investigation(self, project_id):
@@ -1785,6 +1795,10 @@ class ImageService:
                         "The translation skipped every image left in your list. "
                         "Open one in Compare images to mark it reviewed or copy a revision task for it."
                         if any(row["state"] == "skipped" for row in rows)
+                        else "Every image in your list is already applied to "
+                        f"{self._profile(project_id)['imageRoot']}, which the game doesn't read: "
+                        "pack them into an archive the game loads."
+                        if self._profile(project_id).get("decoded")
                         else "Every image in your list is already in the game."
                     )
                 rows = left
