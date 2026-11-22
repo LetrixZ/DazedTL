@@ -426,6 +426,25 @@ class QAEngineTests(unittest.TestCase):
         # Only English pronouns are read.
         self.assertIsNone(pronouns.cast("ミナ (Mina) - Female", "French").pattern)
 
+    def test_length_reads_alike_for_any_language_pair(self):
+        # A character ratio flagged ordinary Japanese-to-English expansion,
+        # 237 lines of one game, each needing a reason.
+        for source, live, flagged in (
+            (
+                "ありがとうございます",
+                "Thank you so much, I really appreciate it!",
+                False,
+            ),
+            ("ありがとうございます", "Ok", True),
+            ("はい、わかりました。それでは行きましょう。", "Yes. Let's go.", False),
+            ("Thank you very much!", "ありがとう", False),
+            ("Go now!!", "今すぐ行かなければならない、もう時間がないのだから。", True),
+        ):
+            evidence = manifest.mechanical.evidence(source, live, None)
+            self.assertEqual(
+                "suspicious-length-ratio" in evidence["flags"], flagged, live
+            )
+
     def test_numbers_beside_stat_letters_count(self):
         # Skill descriptions from a release, where English moves the stat away
         # from its number.

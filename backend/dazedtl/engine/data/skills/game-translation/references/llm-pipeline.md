@@ -803,7 +803,7 @@ leaked scaffolding: re.search(r"(?:^|[}\]])\s*Line\d+\s*:", trans, re.I)
 | `missing-center-alignment` | see control-code section |
 | `unsafe-bare-center-code` | see control-code section |
 | `visible-number-mismatch` | ordered list diff, below |
-| `suspicious-length-ratio` | `len(source) >= 8 and len(live) >= 1` and raw ratio `< 0.35` or `> 3.0` |
+| `suspicious-length-ratio` | `len(source) >= 8 and len(live) >= 1`, and both the character ratio and the display-width ratio, a full-width character counting two, `< 0.35` or both `> 3.0` |
 
 **Keep length-ratio out of the blocking set and promote the other seven.** JP to EN routinely triples, so forcing review on expansion drowns the queue in good lines and spends the entire review budget on noise. That 0.35/3.0 band still catches truncation and runaway hallucination.
 

@@ -45,6 +45,13 @@ _VISIBLE_NUMBER_RE = re.compile(
 _IDENTIFIER_RE = re.compile(r"(?<![A-Za-z0-9_])([A-Za-z]+)(\d+)(?![A-Za-z0-9_])")
 
 
+def _width(text: str) -> int:
+    """*text*'s display width, a full-width character counting two, so a
+    length ratio reads alike for any pair: ten Japanese characters as an
+    English line of thirty-odd were 237 false hits in one game."""
+    return sum(2 if unicodedata.east_asian_width(char) in "WF" else 1 for char in text)
+
+
 def _unspaced(source: str, live: str) -> str:
     """*live* with each identifier of *source* it spaced written unspaced, as
     the source writes it, so neither side reads a number the other lacks."""
@@ -218,9 +225,11 @@ def evidence(source: str, live: str, code: int | None) -> dict[str, Any]:
         source_numbers, live_visible
     ):
         flags.append("visible-number-mismatch")
+    # Short or long by its characters and its width alike, so a full-width
+    # line's ordinary expansion into a Latin script, or back, is neither.
     if len(source) >= 8 and len(live) >= 1:
-        ratio = len(live) / len(source)
-        if ratio < 0.35 or ratio > 3.0:
+        ratios = (len(live) / len(source), _width(live) / _width(source))
+        if all(ratio < 0.35 for ratio in ratios) or all(ratio > 3.0 for ratio in ratios):
             flags.append("suspicious-length-ratio")
     return {
         "flags": flags,
