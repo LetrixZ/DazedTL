@@ -1627,9 +1627,12 @@
         };
       event.start();
     } else if (step.do === "common-event") {
-      const event = $dataCommonEvents[step.id];
+      const event = $dataCommonEvents[step.commonEvent];
       if (!event)
-        return { status: "failed", note: `The game has no common event ${step.id}.` };
+        return {
+          status: "failed",
+          note: `The game has no common event ${step.commonEvent}.`,
+        };
       // A reserved common event waits for the map to claim it, which play
       // could read as calm before it did; the map's interpreter runs it now.
       await until(() => !$gameMap.isEventRunning(), 30);

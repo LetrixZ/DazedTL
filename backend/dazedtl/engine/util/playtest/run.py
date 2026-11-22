@@ -117,7 +117,10 @@ def read_stops(value: Any) -> list[dict[str, Any]]:
         title = str(stop.get("title") or "").strip()
         if not title:
             raise ValueError(f"Stop {number} needs a title that says where it goes.")
-        stops.append({**stop, "id": f"stop-{number}", "title": title[:80]})
+        # The tour names each stop by its place in the list, so a common
+        # event's number, given as its stop's `id`, moves to a key of its own.
+        event = {"commonEvent": stop["id"]} if stop["do"] == "common-event" else {}
+        stops.append({**stop, **event, "id": f"stop-{number}", "title": title[:80]})
     return stops
 
 

@@ -28,6 +28,7 @@ from util.playtest.run import (
     layout_probes,
     merge,
     observations,
+    read_stops,
     read_widths,
 )
 from util.rpgmaker_fonts import fallback_glyphs
@@ -958,4 +959,9 @@ assert sorted(text["text"] for row in never for text in row["texts"]) == [
 ], never
 never = [row for row in against["problems"] if row["check"] == "untranslated"]
 assert never == [], never
+
+# A common-event stop names its event by `id`, which the tour's own name for
+# the stop replaced, so every one failed as "no common event stop-1".
+stop = read_stops([{"title": "Ending", "do": "common-event", "id": 7}])[0]
+assert (stop["id"], stop["commonEvent"]) == ("stop-1", 7), stop
 print("ok")
