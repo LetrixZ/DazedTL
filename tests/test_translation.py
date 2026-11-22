@@ -241,6 +241,9 @@ class TranslationTests(unittest.TestCase):
         self.assertIn(
             "line (Translation unusually short", current["states"]["scene"]["message"]
         )
+        # The run said only that its translations were saved, so the kept
+        # line showed first as a gap in the export.
+        self.assertIn("1 line kept the source text", current["message"])
         self.assertEqual(provider.calls, 1)
         self.assertEqual(
             results.get(live)["translations"],

@@ -258,6 +258,7 @@ class Runner:
             self.job["states"][identity] = {
                 "state": "accepted",
                 "message": kept_message(failing),
+                "kept": len(failing),
             }
             self.answer(identity, output, failing)
         except ValueError as exc:
@@ -308,6 +309,7 @@ class Runner:
                             for identity, reason in (failing or {}).items()
                         }
                     ),
+                    "kept": len(failing or {}),
                 }
             except ValueError as exc:
                 self.job["states"][asker] = {"state": "failed", "message": str(exc)}

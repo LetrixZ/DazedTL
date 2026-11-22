@@ -49,21 +49,38 @@ def declined_units(job):
     )
 
 
+def kept_lines(job):
+    """How many lines the run's accepted requests kept in their source text,
+    as no usable translation (runner.kept_message); a request saved before
+    the count was kept counts one."""
+    return sum(
+        row.get("kept", 1)
+        for row in job["states"].values()
+        if row["state"] == "accepted" and row["message"]
+    )
+
+
 def finished_message(job):
     """What a run says once every request has a saved translation: the
     assistant injects them next, while a Manual project's own tools write
     them once they are exported, unless a request's line kept its source
-    text (runner.kept_message), which then has no translation yet."""
+    text (runner.kept_message), which then has no translation yet. Either
+    method says so, where the assistant's run read as finished."""
+    kept = kept_lines(job)
     if job.get("method") == MANUAL:
-        if any(
-            row["state"] == "accepted" and row["message"]
-            for row in job["states"].values()
-        ):
+        if kept:
             return (
                 "Translations saved, but some lines kept their source text, so "
                 "they have no translation yet. Estimate again to retry them."
             )
         return "Every line is translated. Export the translations for your tools to write into the game."
+    if kept:
+        return (
+            f"Translations saved, but {kept} line{'s' if kept != 1 else ''} kept "
+            "the source text, as no usable translation: each request's message "
+            "names them, and they have no translation yet. Injection and runtime "
+            "QA remain separate."
+        )
     return "Translations saved. Injection and runtime QA remain separate."
 
 
