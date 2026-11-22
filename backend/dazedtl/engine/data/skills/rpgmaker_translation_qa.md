@@ -1,4 +1,4 @@
-# RPG Maker text QA
+# Text QA
 
 <!-- qa-contract:rpgmaker-qa-v22
 single-policy role-briefs parallel-workers worker-brief app-owned-inventory immutable-review-bundles database-checks
@@ -49,7 +49,7 @@ do not call a model-provider API.
 
 ## Coordinator
 
-You run the task; four workers review it at the same time.
+You run the task; up to four workers review it at the same time.
 Run `{{CLI}} status --task {{TASK}}`; read the task's context, {{CONTEXT}}, only when a choice you must settle needs its glossary or guidance, since each worker's brief and bundles carry what reviewing needs.
 
 A task builds on earlier reviews: lines an earlier QA of this game reviewed, unchanged since and with the same glossary entries and quirks, are only context, and `status` counts them under `reviewed_before`.
@@ -64,7 +64,7 @@ The worker prompt, with the worker's name in place of `<name>`:
 {{SHELL_NOTE}}You are text QA worker <name>. Run {{CLI}} brief --task {{TASK}} --role worker --worker <name> and follow it.
 ````
 
-1. Start four workers that run at the same time, such as background sub-agents, each a fresh session with a name of its own, such as `rev-1` to `rev-4`.
+1. Start four workers that run at the same time, such as background sub-agents, each a fresh session with a name of its own, such as `rev-1` to `rev-4`; for a task of a few bundles, start two, since a check is always another worker's.
    Give each only the worker prompt above, changing nothing but its name.
    A worker's run ends after a few bundles, which keeps its reviews sharp and its cost low, with one line saying how far it got; start its next run under the same name with the same prompt until `status` reports `complete`.
    Restart a worker that `next` gave no bundle once `status` shows `bundles_pending` again or no worker is running, since accepted bundles open new ones and `next` opens the next stage.
