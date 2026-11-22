@@ -1507,8 +1507,20 @@
     state.backdrop = options.battlebacks || ["", ""];
   }
 
+  /** Whether the game ships every image the battle with *troop* loads, as
+   * the engine stops the game on one it lacks (util/playtest/run battlers). */
+  function drawable(troop, options) {
+    const shipped = options.battlers;
+    if (!shipped) return true;
+    const folder = $dataSystem.optSideView ? "sv_enemies" : "enemies";
+    return troop.members.every((member) => {
+      const enemy = $dataEnemies[member.enemyId];
+      return !enemy || !enemy.battlerName || shipped[folder].includes(enemy.battlerName);
+    });
+  }
+
   stops.battle = async (options) => {
-    const troop = $dataTroops.find(
+    const troops = $dataTroops.filter(
       (row) =>
         row &&
         row.members &&
@@ -1517,8 +1529,14 @@
             $dataEnemies[member.enemyId] && $dataEnemies[member.enemyId].name,
         ),
     );
-    if (!troop)
+    if (!troops.length)
       return { status: "skipped", note: "The game has no troop with enemies." };
+    const troop = troops.find((row) => drawable(row, options));
+    if (!troop)
+      return {
+        status: "skipped",
+        note: "The game ships no images for its troops' enemies, so no battle can start.",
+      };
     if (!$gameParty.members().length && $dataActors[1]) $gameParty.addActor(1);
     backdrop(options);
     startBattle(troop.id);
@@ -1638,6 +1656,12 @@
       await until(() => !$gameMap.isEventRunning(), 30);
       $gameMap._interpreter.setup(event.list, 0);
     } else if (step.do === "battle") {
+      const troop = $dataTroops[step.troop];
+      if (troop && troop.members && !drawable(troop, options))
+        return {
+          status: "failed",
+          note: `The game ships no image for an enemy of troop ${step.troop}.`,
+        };
       backdrop(options);
       startBattle(step.troop);
       await until(() => isScene("Scene_Battle"), 20);

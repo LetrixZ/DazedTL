@@ -83,18 +83,34 @@ _ENGINE_SCENES = frozenset({
 })
 
 
+def shipped_images(web_root: Path, folder: str) -> list[str]:
+    """The images the game ships in its img/*folder*, by the names its data
+    gives them, encrypted ones too."""
+    path = web_root / "img" / folder
+    if not path.is_dir():
+        return []
+    return sorted(
+        entry.name.split(".", 1)[0]
+        for entry in path.glob("*")
+        if entry.suffix.lower() in {".png", ".png_", ".rpgmvp"}
+    )
+
+
 def battlebacks(web_root: Path) -> list[str]:
     """A battle background pair the game ships, for battles the tour starts
     on maps that name none; empty names show none."""
     names = []
     for folder in ("battlebacks1", "battlebacks2"):
-        found = sorted(
-            path.name.split(".", 1)[0]
-            for path in (web_root / "img" / folder).glob("*")
-            if path.suffix.lower() in {".png", ".png_", ".rpgmvp"}
-        ) if (web_root / "img" / folder).is_dir() else []
+        found = shipped_images(web_root, folder)
         names.append(found[0] if found else "")
     return names
+
+
+def battlers(web_root: Path) -> dict[str, list[str]]:
+    """The enemy images the game ships, front and side view, so the tour
+    starts no battle whose enemies the engine would stop the game to load:
+    a game may keep its troops but ship no enemy art."""
+    return {folder: shipped_images(web_root, folder) for folder in ("enemies", "sv_enemies")}
 
 
 def read_stops(value: Any) -> list[dict[str, Any]]:
@@ -150,6 +166,7 @@ def tour(
         "opening": OPENING_SECONDS,
         "battle": BATTLE_SECONDS,
         "battlebacks": battlebacks(web),
+        "battlers": battlers(web),
         "source": reading(),
     }
     titles = {stop["id"]: stop["title"] for stop in plan["stops"]}

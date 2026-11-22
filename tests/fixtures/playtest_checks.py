@@ -22,6 +22,7 @@ from util.original_values import Originals
 from util.playtest import fixes
 from util.playtest.checks import static_checks
 from util.playtest.run import (
+    battlers,
     block_index,
     compare,
     layout_fit,
@@ -964,4 +965,12 @@ assert never == [], never
 # the stop replaced, so every one failed as "no common event stop-1".
 stop = read_stops([{"title": "Ending", "do": "common-event", "id": 7}])[0]
 assert (stop["id"], stop["commonEvent"]) == ("stop-1", 7), stop
+
+# A game kept its troops but shipped no front-view enemy art, so the battle
+# stop started a battle the engine stopped the game to load; the tour now
+# knows the images each view can load.
+art = temporary / "battlers"
+(art / "img" / "sv_enemies").mkdir(parents=True)
+(art / "img" / "sv_enemies" / "Slime.rpgmvp").write_bytes(b"")
+assert battlers(art) == {"enemies": [], "sv_enemies": ["Slime"]}, battlers(art)
 print("ok")
