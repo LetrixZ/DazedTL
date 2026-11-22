@@ -15,3 +15,9 @@
 
 - **Translate:** an OpenRouter Batch on a Google model no longer fails every request with "Invalid response_json_schema".
 - **Translate:** a Batch run no longer stops with "status failed (HTTP 404)" over a batch OpenRouter had just accepted.
+- **Translate:** an Assistant-led run no longer fails a whole request over one line that broke a code, and says how many lines it kept untranslated.
+- **Text QA:** ordinary Japanese-to-English lines are no longer flagged for an unusual length, nor "Scene 1" as a number mismatch.
+- **Release:** the playtest plays common-event stops, skips battles a game ships no enemy art for, and accepts a censor mask Text QA keeps.
+- **Release:** the playtest's fixes reach the game when nothing new breaks, even beside a problem no fix removes.
+- **Images:** an image applied to a decoded folder no longer reads as in the game, nor as changed when its report is read again.
+- **Release:** the assistant's patch waits for a GameUpdate repository instead of shipping the updater without one.
