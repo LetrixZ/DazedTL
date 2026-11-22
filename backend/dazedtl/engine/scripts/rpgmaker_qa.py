@@ -72,7 +72,9 @@ def main() -> int:
     )
     observe.add_argument("--task", required=True, type=Path)
     observe.add_argument("--worker", required=True)
-    observe.add_argument("--identity", required=True)
+    observe.add_argument(
+        "--identity", required=True, action="append", help="A line; repeat for more."
+    )
     observe.add_argument("--category", required=True, action="append")
     observe.add_argument("--note", required=True)
     next_cmd = sub.add_parser("next", help="Claim a bundle and print it for review.")
@@ -230,9 +232,15 @@ def run(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     elif args.command == "decisions":
         _print(rpgmaker_qa._decisions(Path(args.task).expanduser().resolve()))
     elif args.command == "observe":
-        _print(rpgmaker_qa.record_observation(
-            args.task, args.worker, args.identity, args.category, args.note
-        ))
+        # Each line named is observed with the same reason; one named alone
+        # prints as it always did.
+        observed = [
+            rpgmaker_qa.record_observation(
+                args.task, args.worker, identity, args.category, args.note
+            )
+            for identity in dict.fromkeys(args.identity)
+        ]
+        _print(observed[0] if len(observed) == 1 else observed)
     elif args.command == "finalize":
         _print(rpgmaker_qa.finalize(args.task, args.skip_declined))
     return 0
