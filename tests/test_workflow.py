@@ -1331,6 +1331,26 @@ class WorkflowTests(unittest.TestCase):
             organized("\\N[1]だ。")
         self.assertEqual(self.engine.actor_variables, {})
 
+    def test_a_dump_decoded_into_the_original_counts_once(self):
+        # A dump decoded into the game before preparation recorded it was read
+        # from the original and again as the dump, so every line counted
+        # twice in the census and the paid estimate.
+        (self.game / "source.json").unlink()
+        (self.game / "decoded").mkdir()
+        (self.game / "decoded/strings.txt").write_bytes("はい。\n".encode())
+        original_files.record(self.game, original_files.PREPARED)
+        counted = take_census(
+            self.engine,
+            self.profile,
+            self.identity,
+            self.game,
+            lifecycle(self.profile, self.identity),
+            "decoded",
+            lambda: False,
+            lambda _message: None,
+        )
+        self.assertEqual(counted["runs"], 1)
+
     def test_complete_needs_the_tools_census_covered_not_the_assistants_word(self):
         def line(code, *parameters):
             return {"code": code, "indent": 0, "parameters": list(parameters)}

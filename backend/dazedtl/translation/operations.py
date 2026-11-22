@@ -182,6 +182,10 @@ def take_census(
             raise ValueError(
                 "Name the folder your decoder wrote, relative to the game."
             )
+        # A dump decoded into the game before preparation recorded it is in
+        # the original too; it is read once, as the dump.
+        inside = folder.relative_to(Path(source).resolve()).as_posix().casefold() + "/"
+        names = [name for name in names if not name.casefold().startswith(inside)]
 
     def dump(folder):
         for item in sorted(folder.rglob("*")):
