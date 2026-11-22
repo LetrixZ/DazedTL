@@ -50,6 +50,15 @@ def inventory_path(workspace, project_id):
     return Path(workspace) / "translation/projects" / project_id / "inventory.json"
 
 
+# Why a census is stale (operations.census_stale): preparation records the
+# original it counts again, which a game update replaces too.
+STALE_CENSUS = (
+    "The census no longer counts the game as it is: its recorded original "
+    "changed since, as preparation or a game update changes it, or this "
+    "DazedTL counts more of its text."
+)
+
+
 def require_coverage(scope):
     """Complete means the tool saw every Japanese run the game holds
     extracted or set aside by a rule; the assistant's word is not enough."""
@@ -58,9 +67,7 @@ def require_coverage(scope):
             "Run census first: --complete needs the tool's own count of the game's Japanese text."
         )
     if scope["stale"]:
-        raise ValueError(
-            "The census no longer counts the game as it is: the game was updated, or this DazedTL counts more of its text. Run census again."
-        )
+        raise ValueError(STALE_CENSUS + " Run census again.")
     if scope["needs_dump"]:
         raise ValueError(
             "The census can't read "

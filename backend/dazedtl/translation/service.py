@@ -1322,7 +1322,8 @@ Additional project instructions:
         _record, project = self.project(project_id)
         if census_stale(self.workspace, project_id, project.root):
             raise PackageRefusal(
-                "The census no longer counts the game as it is: the game was updated, or this DazedTL counts more of its text. Run census again, then organize --complete with your units, before packaging.",
+                run_compiler.STALE_CENSUS
+                + " Run census again, then organize --complete with your units, before packaging.",
                 "The game changed since your assistant counted its text; it counts it again first.",
             )
         try:
