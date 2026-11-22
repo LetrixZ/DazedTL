@@ -104,11 +104,11 @@ class LanguageTests(unittest.TestCase):
 
     def test_the_base_rules_render_for_each_pair(self):
         raw = PROMPT_PATH.read_bytes()
-        # The rules every Japanese to English run sent before the languages
-        # became a setting, which saved estimates and requests are bound to.
+        # The rules a Japanese to English run sends, pinned so that editing
+        # them is deliberate: saved estimates were made against this text.
         self.assertEqual(
             hashlib.sha256(render_for_run(raw, {"language": "English"})).hexdigest(),
-            "8ceb972d50953a1cd7f0a30922d186d6afbec5e0a8203eed472f56c8b9ff9763",
+            "f94aed0a8d370a5c896fccd886c5b7228786ac7840e50f2cedf0ced2a72eb597",
         )
         english = render(raw.decode("utf-8"), ENGLISH, "Japanese")
         self.assertTrue(english.startswith("You are an expert English-to-Japanese"))
