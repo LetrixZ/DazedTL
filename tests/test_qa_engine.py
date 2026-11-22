@@ -436,6 +436,9 @@ class QAEngineTests(unittest.TestCase):
             ),
             ("ＴＰ２０増加", "Increases TP by 20."),
             ("1000Gを手に入れた", "Obtained 1,000 G."),
+            # Japanese writes a name and its number together, which English
+            # spaces; the source showed no number and the English one.
+            ("Scene1を再生する", "Play Scene 1."),
         ):
             evidence = manifest.mechanical.evidence(source, live, None)
             self.assertNotIn("visible-number-mismatch", evidence["flags"], source)

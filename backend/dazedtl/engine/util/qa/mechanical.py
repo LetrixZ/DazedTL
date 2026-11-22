@@ -40,6 +40,24 @@ _VISIBLE_NUMBER_RE = re.compile(
     rf"(?<![A-Za-z0-9_])(?:{_NUMBER_UNIT}(?=\d))?([-+]?\d+(?:[.,]\d+)?)"
     rf"{_NUMBER_UNIT}?(?![A-Za-z0-9_])"
 )
+# A source identifier of letters and digits, such as Scene1, which Japanese
+# writes unspaced and English may space as Scene 1.
+_IDENTIFIER_RE = re.compile(r"(?<![A-Za-z0-9_])([A-Za-z]+)(\d+)(?![A-Za-z0-9_])")
+
+
+def _unspaced(source: str, live: str) -> str:
+    """*live* with each identifier of *source* it spaced written unspaced, as
+    the source writes it, so neither side reads a number the other lacks."""
+    for word, digits in set(_IDENTIFIER_RE.findall(source)):
+        live = re.sub(
+            rf"(?<![A-Za-z0-9_]){re.escape(word)}\s+{digits}(?![A-Za-z0-9_])",
+            word + digits,
+            live,
+            flags=re.IGNORECASE,
+        )
+    return live
+
+
 _CARDINALS = (
     "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
     "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
@@ -167,8 +185,9 @@ def evidence(source: str, live: str, code: int | None) -> dict[str, Any]:
     source_visible = unicodedata.normalize(
         "NFKC", _RUNTIME_TOKEN_RE.sub(" ", source_shells)
     )
-    live_visible = unicodedata.normalize(
-        "NFKC", _RUNTIME_TOKEN_RE.sub(" ", live_shells)
+    live_visible = _unspaced(
+        source_visible,
+        unicodedata.normalize("NFKC", _RUNTIME_TOKEN_RE.sub(" ", live_shells)),
     )
     source_numbers = [_number(n) for n in _VISIBLE_NUMBER_RE.findall(source_visible)]
     live_numbers = [_number(n) for n in _VISIBLE_NUMBER_RE.findall(live_visible)]
