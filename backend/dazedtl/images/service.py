@@ -2322,6 +2322,16 @@ class ImageService:
             identities.add(identity)
             old = index.get(identity)
             row = self._inspect(project_id, old, old, key)
+            applied = row.get("applied") or {}
+            if (
+                result.get("sourceHash") == expected[identity]["sourceHash"]
+                and result.get("sourceHash") == applied.get("sourceHash")
+                and row.get("sourceHash") == applied.get("runtimeHash")
+            ):
+                # Its own apply changed the image after this report judged
+                # it, so the report is read again unchanged, not as evidence
+                # that changed under it.
+                continue
             if result.get("sourceHash") != expected[identity]["sourceHash"] or row.get(
                 "sourceHash"
             ) != result.get("sourceHash"):

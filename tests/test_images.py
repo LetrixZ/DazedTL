@@ -1,5 +1,6 @@
 """Protect scoped handoff, stale reviews and all-or-nothing image application."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -725,6 +726,12 @@ class ImageTests(unittest.TestCase):
         # The game reads its img folder, so nothing is left to install.
         self.assertNotIn("install", step)
         self.assertEqual((self.game / "img/A.png").read_bytes(), candidate)
+        # The report saved again after the apply is read again, and the
+        # image the apply changed is no evidence that changed under it.
+        report = read_json(request["report"])
+        write_bytes(Path(request["report"]), json.dumps(report, indent=1).encode())
+        status = self.service.assistant(self.identity, "status")
+        self.assertEqual((status["next"], status["problems"]), ("done", []))
         # The skipped image stays out of the records; the applied one counts
         # from its preserved original.
         progress = self.service.progress_units(self.identity)
