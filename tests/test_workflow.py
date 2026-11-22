@@ -2154,6 +2154,19 @@ class WorkflowTests(unittest.TestCase):
                     self.identity, "package", reviewed([qa.reason])
                 )
 
+    def test_the_assistants_patch_waits_for_a_gameupdate_repository(self):
+        # The assistant's package shipped the updater with no repository to
+        # update from, which only the Release review refused.
+        with (
+            patch.object(self.service, "package_ready"),
+            patch.object(self.service.game_update, "sync"),
+            patch.object(
+                self.service.game_update, "state", return_value={"state": "needs_repo"}
+            ),
+            self.assertRaisesRegex(ValueError, "GameUpdate repository"),
+        ):
+            self.service.operation(self.identity, "package", {})
+
     def test_a_runtime_hooks_patch_waits_for_its_self_test(self):
         # Labyrinth City Asylum's game filled its quest reward line with
         # string.Format; its plugin held the line as a whole-string key, so

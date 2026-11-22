@@ -2454,8 +2454,9 @@ If you won't translate a request, skip it and go on; it stays declined. Use the 
                     )
             else:
                 self.package_ready(project_id)
-            # The patch carries GameUpdate's current config.
-            self.game_update.sync(project_id)
+            # The patch carries GameUpdate's current config, refused as the
+            # Release review refuses it while it cannot be written.
+            self.game_update.require_ready(project_id)
         self.settings.prepare_engine()
         plan = {
             "version": 1,
