@@ -96,6 +96,10 @@ try:
     patch_manifest(["GameUpdate/undo/state.json"])
 except Exception as error:
     print(shown(error)["message"])
+# A bundle of three Unity volumes, one per folder, which GameUpdate refused
+# as no engine it knew.
+(game / "bundle/Vol 1/Vol 1_Data").mkdir(parents=True)
+print("bundle:", TranslationEngine.detect(None, game / "bundle"))
 """
 
 IMAGES_PHASE = """
@@ -5244,6 +5248,7 @@ class ManualJobs:
         # A manifest naming GameUpdate's own state on the player's computer
         # stopped hook-probes with "The operation could not finish." alone.
         self.assertIn("'GameUpdate/undo/state.json'", stdout)
+        self.assertIn("bundle: Unity", stdout)
 
     def test_images_are_a_progress_phase_of_their_own(self):
         # Translation could not complete while images remained, so a run that

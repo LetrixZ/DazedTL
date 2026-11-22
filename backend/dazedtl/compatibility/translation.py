@@ -212,6 +212,10 @@ class TranslationEngine:
         # last, so a stray archive never renames a game recognized above.
         if any(path.is_file() for path in root.glob("*.xp3", case_sensitive=False)):
             return "KiriKiri"
+        # A bundle of Unity games, one per folder, as a series sells its
+        # volumes; checked after the games recognized by their own root.
+        if any(root.glob("*/*_Data")):
+            return "Unity"
         return UNRECOGNIZED
 
     def documents(self, source):
