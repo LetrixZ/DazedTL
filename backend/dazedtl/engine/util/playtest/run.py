@@ -384,6 +384,7 @@ def merge(static: dict[str, Any], runtime: dict[str, Any], data_prefix: str) -> 
     by_text: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
     for problem, text in literals.values():
         by_text.setdefault(text["text"].strip(), []).append((problem, text))
+    masks = [identity.split("#", 1) for identity in static.get("masks", ())]
     for event in runtime.get("japanese", []):
         located = event.get("source") or {}
         match = literals.get((located.get("file"), located.get("line")))
@@ -405,6 +406,13 @@ def merge(static: dict[str, Any], runtime: dict[str, Any], data_prefix: str) -> 
             continue
         data = event.get("data") or {}
         identity = _identity(data)
+        # A glyph drawn from a line whose censor mask the translation keeps,
+        # as the static check judged it (checks.japanese).
+        if event.get("glyph") and data and any(
+            name == data["file"] and _holds(data, pointer)
+            for name, pointer in masks
+        ):
+            continue
         # Text the engine never translated is translation's to fix: text QA
         # reviews only what was translated.
         untranslated = bool(data.get("untranslated"))

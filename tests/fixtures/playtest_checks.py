@@ -961,6 +961,58 @@ assert sorted(text["text"] for row in never for text in row["texts"]) == [
 never = [row for row in against["problems"] if row["check"] == "untranslated"]
 assert never == [], never
 
+# A censor mask the source holds is the translation's to keep, as Text QA
+# refuses to drop it, so the playtest no longer reads it as a placeholder
+# English readers take for a missing character, on the page or on screen;
+# one the source never held still is one.
+masked = temporary / "masked-game"
+(masked / "data").mkdir(parents=True)
+(masked / "js").mkdir()
+write(masked / "js" / "rmmz_core.js", (game / "js" / "rmmz_core.js").read_text())
+write(masked / "data" / "System.json", {"terms": {"messages": {}}})
+write(
+    masked / "data" / "Map001.json",
+    {
+        "events": [
+            None,
+            {
+                "pages": [
+                    {
+                        "list": [
+                            line("ま〇こがうずく", "Her pu〇〇y aches"),
+                            line("待ってね", "Wait 〇 moment"),
+                            {"code": 0, "indent": 0, "parameters": []},
+                        ]
+                    }
+                ]
+            },
+        ]
+    },
+)
+judged = static_checks(masked, masked / "data")
+flagged = [row["pointer"] for row in judged["problems"] if row["kind"] == "japanese"]
+assert flagged == ["/events/1/pages/0/list/1/parameters/0"], judged["problems"]
+assert judged["masks"] == ["Map001.json#/events/1/pages/0/list/0/parameters/0"], judged
+sighted = merge(
+    judged,
+    {
+        "japanese": [
+            {
+                **seen,
+                "text": "Her pu〇〇y aches",
+                "glyph": True,
+                "data": {
+                    "file": "Map001.json",
+                    "pointer": "/events/1/pages/0/list/0",
+                    "last": 0,
+                },
+            }
+        ]
+    },
+    "data",
+)
+assert [row["pointer"] for row in sighted["problems"]] == flagged, sighted
+
 # A common-event stop names its event by `id`, which the tour's own name for
 # the stop replaced, so every one failed as "no common event stop-1".
 stop = read_stops([{"title": "Ending", "do": "common-event", "id": 7}])[0]

@@ -118,11 +118,25 @@ def _numbers_match(source_numbers: list[str], live: str) -> bool:
     return matched[-1]
 
 
+def _mask(run: str) -> bool:
+    """Whether a run _MASK_RE finds is a censor mask, not a kanji numeral."""
+    return run == "●" or ("〇" in run and not _KANJI_NUMERAL_RE.search(run))
+
+
 def _masked(text: str) -> bool:
     """Whether *text* holds a censor mask."""
-    return any(
-        run == "●" or ("〇" in run and not _KANJI_NUMERAL_RE.search(run))
-        for run in _MASK_RE.findall(_BULLET_RE.sub(r"\1", text))
+    return any(_mask(run) for run in _MASK_RE.findall(_BULLET_RE.sub(r"\1", text)))
+
+
+def without_kept_masks(source: str, live: str) -> str:
+    """*live* without its censor masks when *source* holds one too, as a
+    translation must keep it (censor-mask-mismatch), so a check of the
+    English never reads the kept glyph as a character left untranslated."""
+    if not (_masked(source) and _masked(live)):
+        return live
+    return _MASK_RE.sub(
+        lambda match: "" if _mask(match.group()) else match.group(),
+        _BULLET_RE.sub(r"\1", live),
     )
 
 

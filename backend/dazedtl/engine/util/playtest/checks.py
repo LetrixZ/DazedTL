@@ -33,6 +33,7 @@ from util.rpgmaker_qa_preflight import (
     read_sources,
     visible_texts,
 )
+from util.qa.mechanical import without_kept_masks
 from util.rpgmaker_qa_reach import Reach
 from util.runtime_text import without_control_codes
 from util.source_text import holds_source, words_left
@@ -125,6 +126,8 @@ class _Checks:
         self.problems: list[dict[str, Any]] = []
         self.gaps: list[str] = []
         self.documents: dict[str, Any] = {}
+        # Lines whose censor masks the translation keeps (japanese).
+        self.masks: set[str] = set()
 
     def path(self, name: str) -> str:
         return f"{self.prefix}/{name}" if self.prefix != "." else name
@@ -195,8 +198,19 @@ class _Checks:
                 # drawn (util/source_text); a name window's <名前> is. Text
                 # left reads against the source, as the engine sends it, and
                 # without a Latin source's abbreviations, such as HP.
-                shown = without_control_codes(value)
-                if words_left(value, original):
+                # A censor mask the source holds is the translation's to keep,
+                # as Text QA refuses to drop it, so it is neither Japanese left
+                # nor a placeholder; the tour's sightings of the line are left
+                # to this judgement too.
+                kept = (
+                    without_kept_masks(original, value)
+                    if isinstance(original, str)
+                    else value
+                )
+                if kept != value:
+                    self.masks.add(f"{name}#{location}")
+                shown = without_control_codes(kept)
+                if words_left(kept, original):
                     note = f"{source} is left in this translated text."
                     check = "visible-text"
                 elif placeholders and _PLACEHOLDER_RE.search(shown):
@@ -552,4 +566,5 @@ def static_checks(
         "engine": checks.engine,
         "problems": checks.problems,
         "gaps": checks.gaps,
+        "masks": sorted(checks.masks),
     }
