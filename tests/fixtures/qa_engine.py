@@ -377,6 +377,12 @@ def claimed(text):
 qa_claims.RUN_BUNDLES = 2
 qa.brief(task, "worker", "screen-a")
 text = qa.claim(task, "screen-a")
+assert "already held" not in text, text
+# A second session under the same name is handed the bundle the first holds,
+# and only one result for it is accepted; it is told so.
+resumed = qa.claim(task, "screen-a")
+assert resumed.split("\n", 1)[0] == text.split("\n", 1)[0], resumed
+assert "already held" in resumed, resumed
 printed = []
 runs = [0]
 while row := claimed(text):
@@ -418,6 +424,9 @@ rows = checkpoint()["screen"]["bundles"]
 (check,) = [row for row in rows if row.get("check_of")]
 (forest,) = [row for row in rows if row.get("declined_by")]
 assert check["independent_of"] == forest["declined_by"] == ["screen-a"], rows
+# next says who may take each: once every worker had a part in a bundle, only
+# a new one could, which it never said, so QA stopped there.
+assert check["id"] in text and forest["id"] in text and "new name" in text, text
 assert qa.status(task)["declined"]["waiting"] == 4
 for worker, bundle_id, reason in (
     ("screen-a", forest["id"], "declined"),

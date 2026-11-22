@@ -72,6 +72,13 @@ def claim(
     the decisions recorded since its last bundle, or why none waits for it."""
     root = Path(task_dir).expanduser().resolve()
     worker = str(worker or "worker")
+    _root, _task, before = read_task(root)
+    held = {
+        row["id"]
+        for stage in REVIEW_STAGES
+        for row in before[stage]["bundles"]
+        if row["status"] == "assigned" and row.get("assigned_to") == worker
+    }
     row = next_bundle(
         root, worker, bundle_id, helper=helper, skip_declined=skip_declined
     )
@@ -90,6 +97,14 @@ def claim(
         text += "\n## DECISIONS recorded since your last bundle\n" + "\n".join(
             map(_decision_line, newer)
         ) + "\n"
+    if row["id"] in held:
+        # Two sessions under one name are handed one bundle, and only the
+        # first result is accepted, which nothing said until the second failed.
+        text += (
+            f"\n{worker} already held {row['id']}, so this resumes it. If another "
+            f"session runs as {worker}, stop here and start this one under a new "
+            "name: only one result for a bundle is accepted.\n"
+        )
     return text
 
 
@@ -103,7 +118,51 @@ def _no_bundle(root: Path, worker: str) -> str:
         f"No bundle for {worker} now: the {stage} stage has "
         f"{metrics['bundles_pending']} waiting for another reviewer and "
         f"{metrics['bundles_assigned']} in review.\n"
-    )
+    ) + _waiting_for(root, worker, stage)
+
+
+def _waiting_for(root: Path, worker: str, stage: str) -> str:
+    """Who may take each bundle that waits but not for *worker*, as
+    _next_unlocked chooses: when every worker so far wrote corrections in a
+    bundle, only a new one can, which nothing said, so QA stopped there."""
+    _root, _task, checkpoint = read_task(root)
+    helper = str(((checkpoint.get("workers") or {}).get(worker) or {}).get("helper") or "")
+    stages = ["screen", "deep"] if stage == "screen" else [stage]
+    waiting = [
+        row
+        for name in stages
+        for row in checkpoint[name]["bundles"]
+        if row["status"] == "pending"
+    ]
+    lines = []
+    for rule, says in (
+        (
+            lambda row: worker in (row.get("authors") or []),
+            (
+                "{worker} wrote corrections in {shown}; a reviewer who wrote none "
+                "of them confirms them, so start a worker under a new name for them.\n"
+            ),
+        ),
+        (
+            lambda row: worker in (row.get("independent_of") or []),
+            (
+                "{worker} screened the lines {shown} check; an independent "
+                "reviewer checks them, so start a worker under a new name for them.\n"
+            ),
+        ),
+        (
+            lambda row: helper in (row.get("declined_helpers") or []),
+            (
+                "{worker} runs on the {helper} helper, which declined {shown}; a "
+                "worker on another helper takes them.\n"
+            ),
+        ),
+    ):
+        named = [row["id"] for row in waiting if rule(row)]
+        if named:
+            shown = ", ".join(named[:5]) + (" and more" if len(named) > 5 else "")
+            lines.append(says.format(worker=worker, shown=shown, helper=helper))
+    return "".join(lines)
 
 
 def accept_text(
