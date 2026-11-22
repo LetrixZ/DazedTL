@@ -90,6 +90,12 @@ try:
     TranslationEngine.audit_scope(None, game, ["Game.exe", "winhttp.dll"])
 except ValueError as error:
     print(error)
+from dazedtl.api.views import error as shown
+from util.len_patch_scope import patch_manifest
+try:
+    patch_manifest(["GameUpdate/undo/state.json"])
+except Exception as error:
+    print(shown(error)["message"])
 """
 
 IMAGES_PHASE = """
@@ -5233,7 +5239,11 @@ class ManualJobs:
     def test_git_setup_accepts_declared_files_the_patch_will_add(self):
         # A Unity mod patch delivers only files the original lacks, such as
         # BepInEx; Git setup refused them because they didn't exist yet.
-        self.assertIn("lacks or ignores: winhttp.dll", finished(patch_files))
+        stdout = finished(patch_files)
+        self.assertIn("lacks or ignores: winhttp.dll", stdout)
+        # A manifest naming GameUpdate's own state on the player's computer
+        # stopped hook-probes with "The operation could not finish." alone.
+        self.assertIn("'GameUpdate/undo/state.json'", stdout)
 
     def test_images_are_a_progress_phase_of_their_own(self):
         # Translation could not complete while images remained, so a run that

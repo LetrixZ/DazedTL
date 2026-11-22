@@ -30,6 +30,7 @@ from util.project_preparation import (
 )
 from util.version_update import GitWorkflowError
 from util.version_update.git_workflow import (
+    UserFacingGitError,
     _AssetManifestEntry, _asset_state_path, _commit_tree, _hash_file,
     _is_local_only_asset, _is_tool_owned_path, _load_asset_manifest,
     _load_asset_manifest_metadata, _message, _open_index_lock, _reject_original_checked_out_elsewhere,
@@ -56,7 +57,18 @@ def _path(value: str) -> str:
             or parts[-1] in {".api_key", "api_keys.json", "previous_patch_sha.txt"}
             or gameupdate_local(value)
             or parts[-1].endswith(("_key.txt", "_keys.txt", ".log", ".tmp"))):
-        raise GitWorkflowError(f"Local state or unsafe path cannot enter the patch: {value!r}")
+        # A relative path names nothing outside the game, so the assistant
+        # and the page are shown it, where any other Git failure reads only
+        # "The operation could not finish."
+        error = (
+            UserFacingGitError
+            if not value.startswith("/") and not any(c in value for c in "\\:")
+            else GitWorkflowError
+        )
+        raise error(
+            f"Local state or unsafe path cannot enter the patch: {value!r}. "
+            "Take it out of the runtime manifest."
+        )
     return value
 
 
