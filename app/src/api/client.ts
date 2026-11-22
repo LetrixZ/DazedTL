@@ -254,6 +254,8 @@ export const api = {
   locate: (project_id: string, source: string) =>
     request("locate_project", { project_id, source }),
   remove: (project_id: string) => request("remove_project", { project_id }),
+  rename: (project_id: string, name: string) =>
+    request("project_rename", { project_id, name }),
   stopOriginals: (project_id: string) =>
     request("originals_stop", { project_id }),
   navigate: (screen: Screen) => request("navigate", { screen }),

@@ -3266,6 +3266,11 @@ export type LocateProjectRequest = {
   source: string;
 };
 
+export type RenameProjectRequest = {
+  project_id: string;
+  name: string;
+};
+
 export type AssistantTaskRequest = {
   project_id: string;
   kind: AssistantTaskKind;
@@ -3943,6 +3948,7 @@ export type RpcContract = {
   select_project: { request: ProjectRequest; response: AppState };
   locate_project: { request: LocateProjectRequest; response: AppState };
   remove_project: { request: ProjectRequest; response: AppState };
+  project_rename: { request: RenameProjectRequest; response: AppState };
   navigate: { request: NavigateRequest; response: AppState };
   project_method: { request: ProjectMethodRequest; response: AppState };
   project_languages: { request: ProjectLanguagesRequest; response: AppState };

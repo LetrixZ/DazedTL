@@ -149,6 +149,11 @@ class LocateProjectRequest(TypedDict):
     source: str
 
 
+class RenameProjectRequest(TypedDict):
+    project_id: str
+    name: str
+
+
 class AssistantTaskRequest(TypedDict):
     project_id: str
     kind: AssistantTaskKind
@@ -871,6 +876,8 @@ METHODS: dict[str, Method] = {
     "locate_project": Method(LocateProjectRequest, AppState),
     # Takes a game off the recent list; its saved work stays.
     "remove_project": Method(ProjectRequest, AppState),
+    # Names the game as the app lists it; its folder keeps its own name.
+    "project_rename": Method(RenameProjectRequest, AppState),
     "navigate": Method(NavigateRequest, AppState),
     "project_method": Method(ProjectMethodRequest, AppState),
     "project_languages": Method(ProjectLanguagesRequest, AppState),

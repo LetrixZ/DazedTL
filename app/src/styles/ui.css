@@ -785,6 +785,14 @@ pre {
 .page-header--divided h1 {
   font-size: var(--font-page-title);
 }
+/* A control about the page's own title, such as renaming the project, sits on
+   the title's line and shares its baseline. */
+.page-header-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
 .page-header,
 .page-header--divided {
   flex-wrap: wrap;

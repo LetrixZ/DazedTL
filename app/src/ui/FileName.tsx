@@ -1,6 +1,16 @@
 import { useStartEllipsis } from "./startEllipsis";
 
 /**
+ * A name as a file name: a project's name is the user's and may hold
+ * characters the platforms refuse in a file's, such as "Re:Zero"'s colon.
+ */
+export const fileName = (name: string) =>
+  name
+    .replace(/[:\\/*?"<>|]/g, "-")
+    .replace(/[. ]+$/, "")
+    .trim();
+
+/**
  * A file name that keeps its end visible when shortened: names in one folder
  * usually share a prefix and differ in their last words or numbers, so the
  * cut falls at the start.

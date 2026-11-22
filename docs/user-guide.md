@@ -25,7 +25,8 @@ Wherever it runs, open the game folder in it and give it access to the DazedTL f
 ## How it works
 
 - **Projects.** Each game folder you open is a project: click **Open a game** on the Project page.
-  A game you move or rename keeps its project; open it from its new folder.
+  **Rename** on its page names the project, so a game opened from a folder such as `translation` is still told apart; the folder keeps its own name.
+  A game whose folder you move or rename keeps its project; open it from its new folder.
 - **Three methods.** A new game asks how to translate it: [Guided steps](#guided-steps) for RPG Maker MV, MZ and VX Ace, [Assistant-led](#assistant-led) or [Manual](#manual) for any game; see [Choosing a method](#choosing-a-method).
   **Change method** on the Project page switches later and keeps your work.
 - **Assistant tasks.** Some steps copy a task for your assistant.

@@ -12,7 +12,7 @@ from unittest.mock import patch
 from dazedtl.projects import location
 from dazedtl.projects.languages import ProjectLanguages
 from dazedtl.projects.location import UNRECOGNIZED, Locations
-from dazedtl.projects.store import SCHEMA_VERSION, Projects
+from dazedtl.projects.store import NAME_LIMIT, SCHEMA_VERSION, Projects
 
 
 class ProjectTests(unittest.TestCase):
@@ -112,6 +112,32 @@ class ProjectTests(unittest.TestCase):
         self.projects = restored
         self.assertEqual(recent(), [second["id"]])
 
+    def test_a_project_takes_the_name_the_user_gives_it(self):
+        project = self.projects.open(self.game("translation"), "len")
+        self.assertEqual(project["name"], "translation")
+        self.projects.rename(project["id"], "  Loccubus\n")
+        self.assertEqual(self.projects.get(project["id"])["name"], "Loccubus")
+        # The name stays through a restart, reopening the folder and a move,
+        # which gave the folder's own name before.
+        self.projects = Projects(self.root)
+        self.assertEqual(self.projects.get(project["id"])["name"], "Loccubus")
+        self.assertEqual(
+            self.projects.open(self.game("translation"))["name"], "Loccubus"
+        )
+        moved = self.projects.move(project["id"], self.game("elsewhere"))
+        self.assertEqual(moved["name"], "Loccubus")
+        # A name is one line within the limit; a refused one changes nothing.
+        before = deepcopy(self.projects.data)
+        saved = self.projects.path.read_bytes()
+        for name in ("", " \t ", "\n", "x" * (NAME_LIMIT + 1)):
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError):
+                    self.projects.rename(project["id"], name)
+                self.assertEqual(self.projects.data, before)
+                self.assertEqual(self.projects.path.read_bytes(), saved)
+        self.projects.rename(project["id"], "x" * NAME_LIMIT)
+        self.assertEqual(self.projects.get(project["id"])["name"], "x" * NAME_LIMIT)
+
     def test_invalid_navigation_cannot_switch_or_modify_projects(self):
         self.projects.open(self.game("first"), "len")
         before = deepcopy(self.projects.data)
@@ -119,6 +145,7 @@ class ProjectTests(unittest.TestCase):
         for action in (
             lambda: self.projects.select("missing"),
             lambda: self.projects.remove("missing"),
+            lambda: self.projects.rename("missing", "Name"),
             lambda: self.projects.navigate("missing"),
         ):
             with self.subTest(action=action):

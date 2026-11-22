@@ -17,6 +17,19 @@ SCHEMA_VERSION = 6
 # What the engine detection names a folder it recognizes no game in
 # (TranslationEngine.detect).
 UNRECOGNIZED = "Investigation pending"
+# The longest name a project takes, in characters.
+NAME_LIMIT = 80
+
+
+def project_name(value):
+    """The name a project keeps from what the user typed: one line of text,
+    with runs of whitespace as one space, at most NAME_LIMIT characters."""
+    name = " ".join(value.split()) if isinstance(value, str) else ""
+    if not name:
+        raise ValueError("Type a name for the project.")
+    if len(name) > NAME_LIMIT:
+        raise ValueError(f"Keep the name to {NAME_LIMIT} characters.")
+    return name
 
 
 def upgrade_v1(value):
@@ -262,6 +275,15 @@ class Projects:
         if data["current_id"] == project_id:
             data["current_id"] = ""
             data["screen"] = "project"
+        self._commit(data)
+
+    def rename(self, project_id, value):
+        """Names the project as the app lists it, such as a game opened from a
+        folder called "translation". The name lives in the registry alone: the
+        game's folder keeps its own name, and no work, checkpoint or run
+        changes."""
+        data = deepcopy(self.data)
+        self._get(data, project_id)["name"] = project_name(value)
         self._commit(data)
 
     def choose_method(self, project_id, method):

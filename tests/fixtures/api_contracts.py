@@ -53,6 +53,10 @@ try:
     assert project, "The fixture game did not open."
     project_id = project["id"]
     call("select_project", {"project_id": project_id})
+    # The name is the user's: the folder "game" keeps its own name.
+    named = call("project_rename", {"project_id": project_id, "name": "テスト"})
+    assert named["project"]["name"] == "テスト", named["project"]
+    assert named["project"]["source"].endswith("game"), named["project"]
     assert call("project_languages_lock", {"project_id": project_id}) == {"reason": ""}
     call("navigate", {"screen": "guided"})
     guided = call("workspace_snapshot", {})["guided"]

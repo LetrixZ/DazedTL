@@ -9,6 +9,7 @@ import { Button } from "../../ui/Button";
 import { DialogBody, DialogHeader } from "../../ui/Dialog";
 import { FadingNote } from "../../ui/FadingNote";
 import { Feedback } from "../../ui/Feedback";
+import { fileName } from "../../ui/FileName";
 import { Modal } from "../../ui/Modal";
 
 /**
@@ -41,7 +42,7 @@ export function ToolFeedbackRow({
     const result = await action.run(
       async () =>
         window.dazedtl.saveToolFeedback(
-          `${project.name} tool feedback.md`,
+          `${fileName(project.name)} tool feedback.md`,
           await shared(),
         ),
       "",

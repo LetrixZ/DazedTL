@@ -709,6 +709,12 @@ class Application:
         self.projects.remove(project_id)
         return self.state()
 
+    def project_rename(self, project_id, name):
+        """Names the project as the app lists it; its game folder keeps its
+        own name."""
+        self.projects.rename(project_id, name)
+        return self.state()
+
     def project_method(self, project_id, method):
         """Choose a game's method; Guided steps link the game's Guided workspace."""
         if method == "guided":
@@ -963,6 +969,7 @@ def routes(app):
                 "select_project",
                 "locate_project",
                 "remove_project",
+                "project_rename",
                 "navigate",
                 "project_method",
                 "project_languages",

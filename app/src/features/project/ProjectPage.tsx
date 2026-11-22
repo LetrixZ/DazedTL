@@ -44,6 +44,7 @@ import { VersionsPanel } from "../translation/VersionsPanel";
 import type { SettingsSection } from "../settings/Settings";
 import { CheckpointsPanel } from "./CheckpointsPanel";
 import { methodLabels } from "./MethodDialog";
+import { RenameProject } from "./RenameProject";
 import { ExportImport } from "./TranslationFile";
 
 export type ProjectTab = "status" | "history" | "checkpoints" | "exchange";
@@ -134,6 +135,7 @@ export default function ProjectPage({
     <PageLayout variant="editor" className="project-page" aria-label="Project">
       <PageHeader
         title={project.name}
+        titleAction={<RenameProject project={project} disabled={busy} />}
         description={
           // Each action sits beside what it changes: the method, and the
           // folder the path names.

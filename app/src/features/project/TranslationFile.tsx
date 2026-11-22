@@ -11,13 +11,14 @@ import { DialogBody, DialogHeader } from "../../ui/Dialog";
 import { Modal } from "../../ui/Modal";
 import { PageBody } from "../../ui/PageLayout";
 import { PathText } from "../../ui/PathText";
+import { fileName } from "../../ui/FileName";
 import { Section } from "../../ui/Section";
 import { StatusIcon } from "../../ui/StatusIcon";
 import { plural } from "../../ui/displayText";
 
 /** The name a game's exported file is offered under. */
 export const exportName = (project: Project) =>
-  `${project.name} translation.json`;
+  `${fileName(project.name)} translation.json`;
 
 /**
  * Saves a project's translation file where the user chooses and says what it

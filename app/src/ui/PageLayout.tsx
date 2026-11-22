@@ -19,12 +19,15 @@ export function PageLayout({
 }
 export function PageHeader({
   title,
+  titleAction,
   description,
   actions,
   divided = false,
   className = "",
 }: {
   title: string;
+  /** A control about the page's own title, such as renaming the project. */
+  titleAction?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
   divided?: boolean;
@@ -35,7 +38,10 @@ export function PageHeader({
       className={`page-header ${divided ? "page-header--divided" : ""} ${className}`}
     >
       <div>
-        <h1>{title}</h1>
+        <div className="page-header-title">
+          <h1>{title}</h1>
+          {titleAction}
+        </div>
         {description && <p>{description}</p>}
       </div>
       {actions}
