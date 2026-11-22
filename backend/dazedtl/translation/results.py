@@ -15,6 +15,7 @@ from .files import digest, encode, project_path, read_json, write_project_json
 from .project import WORK
 from .refusals import RULES_VERSION, line_refusal
 from .requests import (
+    _parsed,
     protected_tokens,
     result_value,
     source_language,
@@ -210,20 +211,54 @@ def _content_failures(request, translations):
     return failures
 
 
+def _bound_lines(request, translations):
+    """A reply's translations with each line that changed a protected token
+    or mask, broke a layout bound or came back empty (requests
+    `result_value`, read a line at a time) in its source text, and those
+    lines with why. A reply whose IDs differ from the request's is refused
+    whole, since none of its lines can be told apart."""
+    sources = request["sources"]
+    parsed = _parsed(translations)
+    if not isinstance(parsed, dict) or set(parsed) != set(sources):
+        raise ValueError("Response IDs do not match the requested source IDs.")
+    output, bound = {}, {}
+    for identity, text in parsed.items():
+        try:
+            output.update(
+                result_value(
+                    {**request, "sources": {identity: sources[identity]}},
+                    {identity: text},
+                )
+            )
+        except ValueError as error:
+            output[identity] = sources[identity]
+            reason = str(error).removeprefix("The response ").rstrip(".")
+            bound[identity] = reason[0].lower() + reason[1:]
+    return output, bound
+
+
 def _checked(request, translations, keep):
     """The result's translations and the lines kept in their source text,
     refusing any line that holds a refusal note in place of game text,
-    whoever wrote it. A line that fails the content check refuses the
-    result, unless keep: then, while another line of it passes, the line
-    keeps its source text, as Guided keeps such a line of a response."""
-    output = result_value(request, translations)
+    whoever wrote it. A line that fails the content check or changed a
+    protected token, mask or layout bound refuses the result, unless keep:
+    then, while another line of it passes, the line keeps its source text,
+    as Guided keeps such a line of a response."""
+    try:
+        output, bound = result_value(request, translations), {}
+    except ValueError:
+        if not keep:
+            raise
+        # One paid line that broke a token failed the whole request and the
+        # run with it, though every other line passed.
+        output, bound = _bound_lines(request, translations)
     identity = _refusal(request, output)
     if identity is not None:
         raise ValueError(
             f"{identity} holds a refusal note instead of its translation. "
             "Translate it, or decline the request so another model can finish it."
         )
-    failures = _content_failures(request, output)
+    failures = {**bound, **_content_failures(request, output)}
     sources = request["sources"]
     if not failures:
         if translates_nothing(request, {"translations": output}):

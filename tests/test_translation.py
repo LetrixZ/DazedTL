@@ -245,6 +245,22 @@ class TranslationTests(unittest.TestCase):
         # line showed first as a gap in the export.
         self.assertIn("1 line kept the source text", current["message"])
         self.assertEqual(provider.calls, 1)
+        # A line that changed a protected token failed the whole paid request
+        # and the run with it; it keeps its source text like the line above.
+        tokens = {"name": "⟦P0⟧は来た。", "moan": "ん♥っ…"}
+        guarded = logical_request(
+            {"id": "guarded", "sources": tokens}, {"user": "Live"}
+        )
+        reply = {"text": json.dumps({"name": "He came.", "moan": "Mm♥Ah"})}
+        job, _plan = self.run_record(requests=[guarded])
+        Runner(self.store, job["id"], provider, lambda: None).step()
+        current, _plan = self.store.load(job["id"])
+        self.assertEqual(current["status"], "complete")
+        self.assertIn("protected token", current["states"]["guarded"]["message"])
+        self.assertEqual(
+            results.get(guarded)["translations"],
+            {"name": tokens["name"], "moan": "Mm♥Ah"},
+        )
         self.assertEqual(
             results.get(live)["translations"],
             {"line": sources["line"], "moan": "Mm♥Ah"},
