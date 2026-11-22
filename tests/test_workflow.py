@@ -2174,6 +2174,48 @@ class WorkflowTests(unittest.TestCase):
                     self.identity, "package", reviewed([qa.reason])
                 )
 
+    def test_the_patch_refusal_names_what_is_left_to_translate(self):
+        # The refusal named only the phase, so an assistant read DazedTL's
+        # code to find the image record its patch waited for.
+        selected = self.project.read()
+        self.service.save(
+            self.identity,
+            selected["revision"],
+            {
+                **selected["options"],
+                "include_images": True,
+                "images_extract_only": False,
+            },
+        )
+        self.engine.progress = lambda *_args, **_kwargs: {
+            "phases": {"qa": "complete"},
+            "metrics": {
+                "text": {"total": 2, "translated": 2},
+                "images": {"total": 3, "translated": 1},
+            },
+        }
+        self.engine.setup_mismatch = lambda *_args: None
+        self.engine.runtime_paths = lambda _manifest: []
+        self.service.image_units = lambda _project: {
+            "complete": True,
+            "units": [
+                {"id": "img/title.png", "translation": ".dazedtl/images/img/title.png"},
+                {"id": "img/menu.png", "translation": None},
+            ],
+        }
+        self.enterContext(patch.object(self.service, "require_inventory"))
+        self.enterContext(
+            patch.object(self.service, "patch_manifest", return_value="manifest.json")
+        )
+        (refusal,) = [
+            str(refusal)
+            for refusal in self.service.unfinished(self.identity)
+            if "scope" in str(refusal)
+        ]
+        self.assertIn("1 of 3", refusal)
+        self.assertIn("img/menu.png", refusal)
+        self.assertNotIn("img/title.png", refusal)
+
     def test_the_assistants_patch_waits_for_a_gameupdate_repository(self):
         # The assistant's package shipped the updater with no repository to
         # update from, which only the Release review refused.

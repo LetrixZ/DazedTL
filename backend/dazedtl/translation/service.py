@@ -1379,16 +1379,33 @@ Additional project instructions:
                 )
             )
         images = selected["include_images"] and not selected["images_extract_only"]
-        if any(
-            counts["total"] is None or counts["translated"] != counts["total"]
-            for counts in (
-                progress["metrics"][metric]
+        short = {
+            metric: counts
+            for metric, counts in (
+                (metric, progress["metrics"][metric])
                 for metric in (("text", "images") if images else ("text",))
             )
-        ):
+            if counts["total"] is None or counts["translated"] != counts["total"]
+        }
+        if short:
+            # The counts and, from the Image Manager, the images left, where
+            # the phase alone had the assistant read DazedTL's code to find them.
+            detail = "; ".join(
+                f"{metric} {counts['translated']} of {counts['total']} translated"
+                if counts["total"] is not None
+                else f"{metric} {counts['translated']} translated of a total not yet known"
+                for metric, counts in short.items()
+            )
+            if "images" in short and (left := self._images_left(project_id)):
+                detail += (
+                    ", with "
+                    + ", ".join(left[:5])
+                    + (" and more" if len(left) > 5 else "")
+                    + " not applied"
+                )
             unmet.append(
                 PackageRefusal(
-                    "Finish the audited translation scope before packaging; unknown totals are not complete.",
+                    f"Finish the audited translation scope before packaging: {detail}.",
                     "Your assistant finishes translating the game's text and images first."
                     if images
                     else "Your assistant finishes translating the game first.",
@@ -1419,6 +1436,19 @@ Additional project instructions:
         ):
             unmet.append(PackageRefusal(*refusal))
         return unmet
+
+    def _images_left(self, project_id):
+        """The images the Image Manager's records count but no apply put in
+        the game, or none when it keeps no records for this project."""
+        try:
+            value = self.image_units(project_id) if self.image_units else None
+        except ValueError, OSError:
+            return []
+        return [
+            unit["id"]
+            for unit in (value or {}).get("units", [])
+            if unit.get("translation") is None
+        ]
 
     def package_ready(self, project_id):
         """Refuses the assistant's patch of a translation that isn't finished
