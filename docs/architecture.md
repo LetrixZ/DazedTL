@@ -39,7 +39,7 @@ Saved manual runs record their engine's [version](../backend/dazedtl/engine/desk
 
 The base translation rules in [system.md](../backend/dazedtl/engine/data/skills/system.md), the prompt templates, field instructions, base glossary and SFX reference live in the engine's [data](../backend/dazedtl/engine/data) folder.
 A workspace's `engine/shared-data` overrides them, and nothing is copied into profiles, so new defaults reach new preparations.
-The base rules are a template on the run's languages ([prompt_pair](../backend/dazedtl/engine/util/prompt_pair.py)), and Japanese to English renders exactly as it did before languages became a setting, so its runs, estimates and caches stay current.
+The base rules are a template on the run's languages ([prompt_pair](../backend/dazedtl/engine/util/prompt_pair.py)), and a Japanese source renders them as written, with only their other-language parts dropped. Their tests pin a hash of that text, so editing their wording is deliberate: saved estimates were made against it.
 The base glossary, the SFX reference and the honorific rules apply to a Japanese source only.
 
 ### RPG Maker text blocks

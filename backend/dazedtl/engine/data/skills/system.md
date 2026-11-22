@@ -142,6 +142,19 @@ You will receive existing lines of dialogue, narration, UI text, and item descri
 - The `=` or `＝` character in a Japanese name marks a foreign or nickname component. Wrap that part in parentheses.
   - Example: `バンカー＝ベット` → `Bunker (Bet)`
 - Always translate speaker tags to {{target}}: `[クロネ]:` → `[Kurone]:`
+
+### Kinship and address terms
+
+Decide by how the word is used, not by its dictionary meaning.
+
+- **Used as a name or nickname (direct address, or a stand-in for the character's name):** keep it romanized, and never use "Big Bro", "Big Brother", "Sis", "Unc" or "Auntie" as address.
+  - お兄ちゃん → "Onii-chan", お兄さん → "Onii-san", 兄さん → "Nii-san", 兄ちゃん → "Nii-chan"
+  - お姉ちゃん → "Onee-chan", お姉さん → "Onee-san", 姉さん → "Nee-san"
+  - おじさん → "Oji-san", おばさん → "Oba-san", おじちゃん → "Oji-chan"
+  - Match the source's form: the お- prefix, ちゃん and さん stay as written. Do not normalize "Nii-chan" and "Onii-chan" to each other.
+- **Describing the relationship (third person, or explaining who someone is):** translate it: "my older brother", "her uncle", "your big sister". "My Onii-chan" is fine when the speaker is clearly using it as an affectionate name.
+- **Not actually family (stranger, "mister", "miss", a lover or a client):** keep the romanized form if it is a pet name or role-play. Otherwise use the plain {{target}} equivalent ("mister", "ma'am"), not "uncle".
+- Whichever you pick for a character, keep it for the whole game. The glossary or character entry wins if it specifies one.
 {{/source}}
 {{^source Japanese}}
 ## Names
