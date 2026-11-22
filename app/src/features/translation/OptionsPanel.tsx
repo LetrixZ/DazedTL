@@ -287,6 +287,14 @@ export function OptionsPanel({
           checked={options.include_images}
           onChange={(checked) => edit("include_images", checked)}
         />
+        <CheckField
+          id="translation-images-extract-only"
+          label="Only extract images"
+          description="Your assistant indexes the pictures but leaves investigating and translating them to you, with the Images tab's copy-task buttons."
+          checked={options.images_extract_only}
+          disabled={!options.include_images}
+          onChange={(checked) => edit("images_extract_only", checked)}
+        />
         <BaseGlossaryField options={options} edit={edit} />
       </CheckGroup>
       {/* Your assistant installs or takes out each tool when it prepares

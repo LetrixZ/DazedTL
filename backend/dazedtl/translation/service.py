@@ -718,7 +718,11 @@ class Translation:
         )
         instructions = selected["instructions"].strip() or "(none)"
         images = (
-            "\n9. Images: translate them through DazedTL's Images steps rather than Len's manual image pipeline; "
+            "\n9. Images: only extract them. Run images --status, then images --scan (with --root <folder> when the game keeps its images in archives you decoded with Len's tools), until the game's images are indexed. "
+            "Do not run images --investigate, --translate or --apply, and do not classify or translate images yourself: the user does that in DazedTL's Images tab. "
+            "Leave image records out of your progress reports; images is a phase of its own."
+            if selected["images_extract_only"] and selected["include_images"]
+            else "\n9. Images: translate them through DazedTL's Images steps rather than Len's manual image pipeline; "
             "images --status says which step comes next, and the steps resume where they stopped. "
             "images --scan indexes the game's images, decrypting encrypted ones. "
             "When images --status finds no folder of loose images because the game keeps them in archives, decode those archives with Len's tools into a folder in the game, "
@@ -781,7 +785,7 @@ Game: {json.dumps(str(project.root), ensure_ascii=False)}
 Skill: {json.dumps(setup["skill"], ensure_ascii=False)}
 Setup instructions: {json.dumps(setup["setup"], ensure_ascii=False)}
 Selected execution mode: {mode}
-Image translation: {"included" if selected["include_images"] else "excluded; report remaining baked text separately"}
+Image translation: {"extracted only; the user investigates and translates them in the Images tab" if selected["images_extract_only"] and selected["include_images"] else "included" if selected["include_images"] else "excluded; report remaining baked text separately"}
 {investigation}{resume}
 
 Work autonomously from start to finish. Ask the user only when the work cannot continue without them: approving API spending, a missing or failing API connection in an API mode, access that is denied, or a decision only the user can make that no source evidence settles. Never ask for routine confirmations, permission to continue, or checks you could make or record yourself. When a check needs something you cannot do, such as capturing the game window, use the mechanical alternative, record the remaining check as pending in status.md and continue. Finish all independent work before asking, and report only such a question as the progress blocker, with the exact answer you need as next_action.
@@ -1374,7 +1378,7 @@ Additional project instructions:
                     "The patch waits for your assistant's QA.",
                 )
             )
-        images = selected["include_images"]
+        images = selected["include_images"] and not selected["images_extract_only"]
         if any(
             counts["total"] is None or counts["translated"] != counts["total"]
             for counts in (

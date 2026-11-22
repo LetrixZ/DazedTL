@@ -19,6 +19,8 @@ class TranslationOptions(TypedDict):
     mode: Literal["agent", "live", "batch"]
     instructions: str
     include_images: bool
+    # Assistant-led only indexes the images; the user translates them in Images.
+    images_extract_only: bool
     include_glossary_base: bool
     install_forge: bool
     install_gameupdate: bool

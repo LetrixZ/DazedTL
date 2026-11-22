@@ -19,6 +19,7 @@ DEFAULTS = {
     "mode": "batch",
     "instructions": "",
     "include_images": True,
+    "images_extract_only": False,
     "include_glossary_base": True,
     "install_forge": True,
     "install_gameupdate": True,
@@ -28,6 +29,7 @@ DEFAULTS = {
 }
 # Options added after workflow.json shipped, which older files and drafts lack.
 ADDED = {
+    "images_extract_only": False,
     "install_gameupdate": True,
     "install_tl_inspector": False,
     "thorough_investigation": False,
@@ -41,6 +43,7 @@ CHECKS = "checks"
 # so changing one keeps saved runs and their quotes current.
 METHOD = {
     "mode",
+    "images_extract_only",
     "install_gameupdate",
     "install_tl_inspector",
     "thorough_investigation",
@@ -70,6 +73,7 @@ def options(value):
         type(value[key]) is not bool
         for key in (
             "include_images",
+            "images_extract_only",
             "include_glossary_base",
             "install_forge",
             "install_gameupdate",
@@ -78,6 +82,8 @@ def options(value):
         )
     ):
         raise ValueError("Project scope choices must be enabled or disabled.")
+    if value["images_extract_only"] and not value["include_images"]:
+        raise ValueError("Only extracting images needs Text in images enabled.")
     if value["text_qa"] not in (*TEXT_QA, CHECKS):
         raise ValueError("Choose a Text QA focus or the checks only.")
     return dict(value)

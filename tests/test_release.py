@@ -776,6 +776,7 @@ class ReleaseTests(unittest.TestCase):
             options = {
                 "mode": "agent",
                 "include_images": False,
+                "images_extract_only": False,
                 "instructions": "",
                 "include_glossary_base": False,
                 "install_forge": False,

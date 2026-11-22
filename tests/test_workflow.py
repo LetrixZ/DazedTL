@@ -2689,6 +2689,19 @@ class WorkflowTests(unittest.TestCase):
         }
         self.assertEqual(self.service.run_mode(self.project), "batch")
 
+    def test_extract_only_images_is_method_and_needs_images(self):
+        # Switching it must keep saved runs current, and it means nothing
+        # without images in scope.
+        from dazedtl.translation.project import options
+
+        on = {**DEFAULTS, "images_extract_only": True}
+        self.assertEqual(scope(on), scope(DEFAULTS))
+        self.assertTrue(options(on)["images_extract_only"])
+        with self.assertRaises(ValueError):
+            options({**on, "include_images": False})
+        legacy = {k: v for k, v in DEFAULTS.items() if k != "images_extract_only"}
+        self.assertFalse(options(legacy)["images_extract_only"])
+
     def test_options_draft_matching_the_saved_options_does_not_block_work(self):
         # Turning a choice off and on again leaves a draft the page shows as
         # clean, so it must not refuse the starting prompt, including one an

@@ -2204,6 +2204,7 @@ class TranslationTests(unittest.TestCase):
                 "version": 3,
                 "mode": "api",
                 "include_images": False,
+                "images_extract_only": False,
                 "instructions": "Keep this",
                 "install_forge": False,
             },
@@ -2223,6 +2224,7 @@ class TranslationTests(unittest.TestCase):
             "mode": "batch",
             "instructions": "Keep this",
             "include_images": False,
+            "images_extract_only": False,
             "include_glossary_base": True,
             "install_forge": False,
         }

@@ -1524,6 +1524,7 @@ export type TranslationOptions = {
   mode: "agent" | "live" | "batch";
   instructions: string;
   include_images: boolean;
+  images_extract_only: boolean;
   include_glossary_base: boolean;
   install_forge: boolean;
   install_gameupdate: boolean;

@@ -2,6 +2,7 @@
 
 ### Added
 
+- **Translate:** an Assistant-led project can have its assistant only extract images, leaving investigating and translating them to you in the Images tab.
 - **Settings > Remote access:** drive this install from another computer's browser, with a token and its own address and port.
 
 ### Fixed

@@ -599,9 +599,14 @@ class Application:
             raise ValueError(
                 "The helper's image steps are for Assistant-led projects; Guided translates images in its Images task."
             )
-        if not project.read()["options"]["include_images"]:
+        options = project.read()["options"]
+        if not options["include_images"]:
             raise ValueError(
                 "Image text is outside this project's scope; report any remaining baked text instead."
+            )
+        if options["images_extract_only"] and step not in ("status", "scan"):
+            raise ValueError(
+                "This project only extracts images; the user investigates and translates them in the Images tab."
             )
         result = self.images.assistant(project_id, step, root)
         try:
