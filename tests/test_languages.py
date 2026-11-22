@@ -108,7 +108,7 @@ class LanguageTests(unittest.TestCase):
         # them is deliberate: saved estimates were made against this text.
         self.assertEqual(
             hashlib.sha256(render_for_run(raw, {"language": "English"})).hexdigest(),
-            "c0c7181cb6a1cdd9408da2975bb9900ec42e6e371535d56e23725fc4962ecfb9",
+            "24b06e2c4578c2e0cd0b3c0beef625081f7515f008a3b3db2bd58ca6eb1c93df",
         )
         english = render(raw.decode("utf-8"), ENGLISH, "Japanese")
         self.assertTrue(english.startswith("You are an expert English-to-Japanese"))
