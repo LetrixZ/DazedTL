@@ -45,7 +45,13 @@ def verify(source, *, full=False):
             "The saved runtime QA evidence needs a compatible app version."
         )
     if full:
-        verify_evidence(source, value["files"])
+        # QA's record binds these files; a progress report with QA complete
+        # records it again.
+        verify_evidence(
+            source,
+            value["files"],
+            "Check them and report progress with QA complete again, which records QA for the files as they are.",
+        )
     else:
         for relative, expected in value["stats"].items():
             stat = project_path(source, relative).stat()

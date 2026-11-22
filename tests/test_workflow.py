@@ -2174,6 +2174,20 @@ class WorkflowTests(unittest.TestCase):
                     self.identity, "package", reviewed([qa.reason])
                 )
 
+    def test_packaging_names_the_runtime_file_that_changed_after_qa(self):
+        # Packaging refused with "Source or guidance changed. Compile and
+        # review a new request plan.", which named no file and a step that
+        # records nothing packaging reads.
+        manifest = WORK + "/work/patch-files.json"
+        write_json(self.game / manifest, ["source.json"])
+        delivery.record(self.game, manifest, ["source.json"])
+        (self.game / "source.json").write_text("{}", encoding="utf-8")
+        with self.assertRaises(ValueError) as refused:
+            delivery.verify(self.game, full=True)
+        self.assertIn("source.json", str(refused.exception))
+        self.assertNotIn(manifest, str(refused.exception))
+        self.assertIn("report progress", str(refused.exception))
+
     def test_the_patch_refusal_names_what_is_left_to_translate(self):
         # The refusal named only the phase, so an assistant read DazedTL's
         # code to find the image record its patch waited for.

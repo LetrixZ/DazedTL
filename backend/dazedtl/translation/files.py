@@ -250,15 +250,23 @@ def read_evidence(path):
     return after, fingerprint
 
 
-def verify_evidence(root, expected):
-    if (
-        not isinstance(expected, dict)
-        or not expected
-        or evidence(root, list(expected)) != expected
-    ):
-        raise ValueError(
-            "Source or guidance changed. Compile and review a new request plan."
-        )
+def verify_evidence(root, expected, step="Compile and review a new request plan."):
+    """Refuses work bound to files *expected* hashes once one changed,
+    naming the files and the *step* that binds the work to them again."""
+    if not isinstance(expected, dict) or not expected:
+        raise ValueError("Source or guidance changed. " + step)
+    current = {}
+    for relative in expected:
+        try:
+            current[relative] = evidence(root, [relative])[relative]
+        except ValueError, OSError:
+            current[relative] = None
+    changed = [
+        relative for relative, value in expected.items() if current[relative] != value
+    ]
+    if changed:
+        named = ", ".join(changed[:5]) + (" and more" if len(changed) > 5 else "")
+        raise ValueError(f"Source or guidance changed: {named}. {step}")
 
 
 def write_project_json(root, relative, value):
