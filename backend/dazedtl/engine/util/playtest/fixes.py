@@ -143,8 +143,10 @@ def served(web: Path, fixes: bytes, out: Path) -> dict[str, Path]:
 
 def refusal(previous: dict[str, Any], report: dict[str, Any]) -> str:
     """Why fixes stay out of the game, or "" once a play with them in place
-    still plays, stops nowhere new and no longer shows something the last
-    playtest found."""
+    still plays, stops nowhere new, and no longer shows something the last
+    playtest found or shows nothing new: fixes for what the tour can't see,
+    such as a crash guard, go in beside a problem no fix removes, as one the
+    playtest reads wrongly."""
     if not report.get("played"):
         return (
             "With these fixes the game did not play: "
@@ -159,9 +161,10 @@ def refusal(previous: dict[str, Any], report: dict[str, Any]) -> str:
         return "With these fixes the game stops where it did not before: " + stopped[0]
     if report["coverage"]["reached"] < (previous.get("coverage") or {}).get("reached", 0):
         return "With these fixes the playtest reached fewer places than before."
-    if not (report.get("since") or {}).get("fixed"):
+    since = report.get("since") or {}
+    if not since.get("fixed") and since.get("new"):
         return (
-            "Nothing the last playtest found changed with these fixes, so they "
-            "stay out of the game."
+            "Nothing the last playtest found changed with these fixes, and the "
+            "play with them showed something new, so they stay out of the game."
         )
     return ""

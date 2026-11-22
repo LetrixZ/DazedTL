@@ -42,7 +42,7 @@ def game_fixes(playtest, kept):
         "width or its scene's layout, rather than changing other files. Then run "
         f"`{playtest} --fix --wait 20`: DazedTL plays the game with the plugin in "
         "place and writes it into the game only when nothing new breaks and "
-        "something the last playtest found is gone; otherwise it says why and "
+        "something the last playtest found is gone or nothing new shows; otherwise it says why and "
         "writes nothing, so revise and run it again. Editing or emptying the "
         "working copy alone changes nothing in the game. That play becomes the latest "
         f"report, and {kept} Fix crashes the translation causes; one the original "

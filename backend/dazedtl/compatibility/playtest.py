@@ -112,9 +112,8 @@ def fixes_copy(root, web):
 
 def run_fixes(plan, log):
     """Plays the game with the assistant's fixes in place of the game's files;
-    once nothing new breaks and something the last playtest found is gone,
-    writes them as one batch History can restore, and the play becomes the
-    playtest's latest report."""
+    once nothing new breaks (fixes.refusal), writes them as one batch History
+    can restore, and the play becomes the playtest's latest report."""
     from desktop.backend.workflow_actions import action_guard, validate_plan
     from util import rpgmaker_window
     from util.playtest import fixes

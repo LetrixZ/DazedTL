@@ -539,6 +539,11 @@ unchanged = {**again, "since": {"fixed": 0, "new": 1}}
 assert fixes.refusal(report, unchanged).startswith("Nothing the last playtest"), (
     unchanged
 )
+# Fixes for what the tour can't see, such as a crash guard, went in only
+# beside a problem they removed, so a problem no fix removes, as one the
+# playtest reads wrongly, kept every later fix out.
+quiet = {**again, "since": {"fixed": 0, "new": 0}}
+assert fixes.refusal(report, quiet) == "", fixes.refusal(report, quiet)
 stopping = json.loads(json.dumps(again))
 stopping["problems"].append(
     {
