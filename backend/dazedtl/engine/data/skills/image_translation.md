@@ -206,7 +206,7 @@ similarity alone.
 
 ### 4a. Rebuild a family member's background from its siblings
 
-The task lists each image's `family`: same-size images that share one backdrop and differ only inside its `region`, such as name cards on one nebula or area banners on one shaded ellipse, with each member's original and how far it is translated.
+The request's `families` lists each group of same-size images that share one backdrop and differ only inside its `region`, such as name cards on one nebula or area banners on one shaded ellipse, once for the whole task, with each member's original and how far it is translated; an image's `family` is its group's id.
 Wherever a member's lettering does not reach a pixel, that member holds the true background, so the family proves most of what an inpainting model would guess.
 Before inpainting any requested image that has a family, rebuild its text-free background with the family solver and render the translation on that output:
 

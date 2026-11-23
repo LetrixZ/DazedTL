@@ -20,4 +20,5 @@
 - **Release:** the playtest plays common-event stops, skips battles a game ships no enemy art for, and accepts a censor mask Text QA keeps.
 - **Release:** the playtest's fixes reach the game when nothing new breaks, even beside a problem no fix removes.
 - **Images:** an image applied to a decoded folder no longer reads as in the game, nor as changed when its report is read again.
+- **Images:** an image task names each variant family once, so copying a big game's investigation task no longer fails as too large.
 - **Release:** the assistant's patch waits for a GameUpdate repository instead of shipping the updater without one.

@@ -74,6 +74,13 @@ def read_json(path, *, limit: int | None = JSON_LIMIT):
     return decode_json(system.read_bytes(path))
 
 
+def read_work_json(path):
+    """A JSON file the app wrote for its own work, such as an image task's
+    request, report or journal, in any size: a large game's request holds one
+    entry per image it names, as its runs' plans and queues do."""
+    return read_json(path, limit=None)
+
+
 def project_path(root, relative, *, exists=True):
     root = Path(root).resolve(strict=True)
     if not root.is_dir():

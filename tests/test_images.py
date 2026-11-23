@@ -901,11 +901,55 @@ class ImageTests(unittest.TestCase):
             )
         self.scan()
         request, _ = self.request("discovery_task", ["img/Card0.png"])
-        family = request["assets"][0]["family"]
+        family = request["families"][request["assets"][0]["family"]]
         self.assertEqual(
             [member["id"] for member in family["members"]],
             ["img/Card0.png", "img/Card1.png", "img/Card2.png"],
         )
+
+    def test_a_task_names_each_family_once_however_many_members_it_has(self):
+        # Every member repeated its whole family, so a 4,291-image game's task
+        # was 1.48 GB: over the read cap, so copying it again failed.
+        base = backdrop()
+        ids = [f"img/Card{index}.png" for index in range(len(TEXTS))]
+        for identity, strokes in zip(ids, TEXTS, strict=True):
+            write_bytes(self.game / identity, rgba_png(letter(base, strokes)))
+        self.scan()
+        request, result = self.request("discovery_task", ids)
+        [family_id] = request["families"]
+        self.assertEqual(len(request["families"][family_id]["members"]), len(ids))
+        self.assertEqual(
+            [asset["family"] for asset in request["assets"]], [family_id] * len(ids)
+        )
+        # Each member is named once in the task, not once per asset sharing it.
+        self.assertEqual(
+            Path(result["request"]).read_text(encoding="utf-8").count('"translated"'),
+            len(ids),
+        )
+
+    def test_a_task_copied_by_an_earlier_version_is_copied_again_not_handed_out(self):
+        # A request written before families were named once repeats them under
+        # every member, so a game like kaikanko's came to 1.48 GB; the app
+        # replaces it instead of reading it back to hand it out or resume it.
+        self.choose(["img/A.png"])
+        first = self.service.action(
+            self.identity, "discovery_task", {"scope": "selected"}
+        )
+        state_path = self.game / ".dazedtl/image_manager/guided/state.json"
+        saved = read_json(state_path)
+        saved["requests"][first["requestId"]].pop("requestVersion")
+        write_json(state_path, saved)
+        # Its report is not read either: putting the shape in the state's record
+        # keeps the app from parsing a task it no longer hands out.
+        with self.assertRaisesRegex(ValueError, "earlier version"):
+            self.service.action(self.identity, "refresh_findings")
+        again = self.service.action(
+            self.identity, "discovery_task", {"scope": "selected"}
+        )
+        self.assertNotEqual(again["requestId"], first["requestId"])
+        current = read_json(Path(again["request"]))
+        self.assertEqual(current["requestVersion"], 2)
+        self.assertEqual(current["resumeFrom"], "")
 
     def test_validation_catches_metadata_loss_hidden_colour_and_stray_changes(self):
         # A compositor rewrote colour under alpha 0 across a whole canvas and

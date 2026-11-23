@@ -19,7 +19,7 @@ from typing import Any
 
 from dazedtl import system
 from dazedtl.storage import write_bytes
-from dazedtl.translation.files import digest, project_path, read_json
+from dazedtl.translation.files import digest, project_path, read_json, read_work_json
 
 from . import validation
 
@@ -292,7 +292,7 @@ def _request_images(root, request, only):
     report = {}
     path = Path(request["report"])
     if path.is_file():
-        saved = read_json(path, limit=48_000_000)
+        saved = read_work_json(path)
         for item in saved.get("assets", []) if isinstance(saved, dict) else []:
             if isinstance(item, dict) and isinstance(item.get("id"), str):
                 report[item["id"]] = item.get("status", "")
@@ -307,7 +307,7 @@ def _request_images(root, request, only):
 
 
 def _check_request(arguments):
-    request = read_json(arguments.request, limit=48_000_000)
+    request = read_work_json(arguments.request)
     root = Path(request["source"])
     found, unreadable = manifest(root)
     results = []

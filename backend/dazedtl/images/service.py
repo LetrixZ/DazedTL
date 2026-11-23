@@ -22,7 +22,13 @@ from dazedtl.languages import ENGLISH, JAPANESE
 from dazedtl.settings import language_pair
 from dazedtl.storage import write_bytes, write_json
 from dazedtl.translation import originals as game_originals
-from dazedtl.translation.files import decode_json, digest, project_path, read_json
+from dazedtl.translation.files import (
+    decode_json,
+    digest,
+    project_path,
+    read_json,
+    read_work_json,
+)
 from dazedtl.translation.git_status_cache import repository_signature
 from dazedtl.translation.helper_command import task_opening
 
@@ -53,6 +59,16 @@ EXAMINATION_METHODS = {"visual", "ocr", "local_ocr", "visual+ocr", "visual+local
 SCOPES = {"remaining", "all", "folders", "selected"}
 ASSISTANT_STEPS = ("status", "scan", "investigate", "translate", "apply")
 REVIEW_VERSION = 1
+# The shape of a task's request: from this version each variant family is
+# named once in `families` and each asset names its family's id, where earlier
+# requests repeated the whole family under every member of it, which made one
+# 1.48 GB for 4,291 images. A request of another shape is neither handed out
+# again nor read back: parsing one could take the memory of the whole app.
+REQUEST_VERSION = 2
+# What a copied request is compared by when the same task is copied again,
+# beside its inventory revision and asset hashes: the fields that change what
+# it asks for.
+REQUEST_FIELDS = ("kind", "scope", "guidance", "revisionComments")
 # Editing requests from this version on accept the assistant's review of an
 # edited image only with a current recipe and passing validation.
 RECIPE_VERSION = 1
@@ -149,6 +165,14 @@ def _investigated(value, counts):
 def _stopped(value):
     """Whether the user stopped the investigation to choose the images."""
     return value["discovery"].get("status") == "stopped"
+
+
+def _current_request(entry):
+    """Whether a saved request entry names a task of this version's shape, so
+    its file may be read: one written before families were named once repeats
+    a family under every member of it, which can make the file too large to
+    read back."""
+    return bool(entry) and entry.get("requestVersion") == REQUEST_VERSION
 
 
 def _notes(value):
@@ -284,10 +308,10 @@ class ImageService:
     def _requested(root, value):
         """The images the latest copied translation task covers."""
         entry = value["requests"].get(value["editing"].get("requestId") or "")
-        if not entry:
+        if not _current_request(entry):
             return []
         try:
-            request = read_json(project_path(root, entry["path"]), limit=48_000_000)
+            request = read_work_json(project_path(root, entry["path"]))
             return [row["id"] for row in request["assets"]]
         except KeyError, OSError, TypeError, ValueError:
             return []
@@ -1101,7 +1125,7 @@ class ImageService:
                     "A pending image approval lacks valid integrity evidence. Its journal was retained."
                 )
             relative = binding["path"]
-            journal = read_json(project_path(root, relative), limit=48_000_000)
+            journal = read_work_json(project_path(root, relative))
             if (
                 journal.get("version") != 1
                 or journal.get("projectId") != project_id
@@ -1856,10 +1880,15 @@ class ImageService:
         if kind == "discovery" and value[kind].get("status") in {"complete", "stopped"}:
             previous_id = ""
         previous_entry = value["requests"].get(previous_id)
+        # A request of an earlier version's shape is neither resumed nor handed
+        # out again: copied before families were named once, it repeats them
+        # under every member and can be far too large to read.
+        if not _current_request(previous_entry):
+            previous_id, previous_entry = "", None
         # A task taken over from another project is resumed, never handed out again.
         if previous_entry and not previous_entry.get("carried"):
             previous_path = project_path(root, previous_entry["path"])
-            previous = read_json(previous_path, limit=48_000_000)
+            previous = read_work_json(previous_path)
 
             def basis(request, assets, versions, notes):
                 return Basis(
@@ -1868,13 +1897,7 @@ class ImageService:
                         "inventory": request.get("inventoryRevision"),
                         **{row["id"]: row["sourceHash"] for row in assets},
                     },
-                    digest(
-                        [
-                            request.get(key, "")
-                            for key in ("kind", "scope", "guidance", "revisionComments")
-                        ]
-                        + [notes]
-                    ),
+                    digest([request.get(key, "") for key in REQUEST_FIELDS] + [notes]),
                 )
 
             # A request names the game's folder for the assistant's tools, so
@@ -1900,6 +1923,7 @@ class ImageService:
                             "scope": scope,
                             "guidance": guidance,
                             "revisionComments": comments,
+                            "requestVersion": REQUEST_VERSION,
                         },
                         rows,
                         (REVIEW_VERSION, RECIPE_VERSION if kind == "editing" else None),
@@ -1933,33 +1957,41 @@ class ImageService:
         # the task was made; a report gives its final hash as candidateHash.
         names = {"frozenHash": "originalPngHash", "editableHash": "candidateHash"}
         index = self._index(project_id)
-        assets = [
-            {
-                key: row.get(names.get(key, key))
-                for key in (
-                    "id",
-                    "path",
-                    "runtime",
-                    "sourceHash",
-                    "encrypted",
-                    "frozen",
-                    "frozenHash",
-                    "editable",
-                    "editableHash",
-                    "width",
-                    "height",
-                    "mode",
-                    "sourceIssue",
-                )
-            }
-            # Siblings that share this image's backdrop, with their originals
-            # and how far each is translated.
-            | {"family": index.family(row["id"])}
-            | ({"revisionNotes": noted[row["id"]]} if row["id"] in noted else {})
-            for row in rows
-        ]
+        # Siblings that share an image's backdrop, with their originals and how
+        # far each is translated, are named once for the task, and each asset
+        # names its family's id: repeated under every member of a family of
+        # thousands, they made a 1.48 GB task.
+        families, assets = {}, []
+        found = index.families_of(row["id"] for row in rows)
+        for row in rows:
+            family = found.get((row.get("family") or {}).get("id"))
+            if family:
+                families[family["id"]] = family
+            assets.append(
+                {
+                    key: row.get(names.get(key, key))
+                    for key in (
+                        "id",
+                        "path",
+                        "runtime",
+                        "sourceHash",
+                        "encrypted",
+                        "frozen",
+                        "frozenHash",
+                        "editable",
+                        "editableHash",
+                        "width",
+                        "height",
+                        "mode",
+                        "sourceIssue",
+                    )
+                }
+                | {"family": family["id"] if family else None}
+                | ({"revisionNotes": noted[row["id"]]} if row["id"] in noted else {})
+            )
         request = {
             "version": 1,
+            "requestVersion": REQUEST_VERSION,
             "kind": kind,
             "id": identity,
             "projectId": project_id,
@@ -1967,6 +1999,7 @@ class ImageService:
             "inventoryRevision": value["inventoryRevision"],
             "created": now(),
             "scope": scope,
+            "families": families,
             "assets": assets,
             "guidance": guidance,
             "report": str(report),
@@ -1987,6 +2020,7 @@ class ImageService:
             "kind": kind,
             "path": request_path.relative_to(root).as_posix(),
             "hash": digest(request),
+            "requestVersion": REQUEST_VERSION,
         }
         value[kind].update(
             status="awaiting_results",
@@ -2129,7 +2163,7 @@ class ImageService:
                 f"classify an image whose only {pair['source']} is such lettering as sound_effects, also when its marks may be sound effects or decoration, "
                 "and recommend an image that also has other text for that text. "
                 "Use metadata, byte-identical duplicate groups, numbered contact sheets and enlarged crops/originals where needed. "
-                "An asset's family lists same-size images that share its backdrop; review a family by what changes (methodology: Review a family by what changes): "
+                "The request's families name each group of same-size images that share a backdrop once, and an asset's family is its group's id; review a family by what changes (methodology: Review a family by what changes): "
                 "view one member in full, then every other member as a crop of the pixels that differ from the closest member examined at its current source hash, many crops to a sheet. "
                 "Each crop examines its member, whose other pixels are that examined member's, lettering included: give the member compared with and the crop box as evidence, "
                 "and view a member with no differing pixels whole. "
@@ -2181,7 +2215,7 @@ class ImageService:
                 "Each request asset names three files with their SHA-256 hashes: runtime and sourceHash are the game's file, encrypted where the game encrypts its images; "
                 "frozen and frozenHash are the original PNG the app preserved from it, which every render and redo starts from, never translated pixels; "
                 "editable and editableHash are the working copy as it was when this task was made. "
-                "An asset's family lists the images that share its backdrop: rebuild its background with the family solver before any inpainting (methodology section 4a), "
+                "The request's families name each group of images that share a backdrop once, and an asset's family is its group's id: rebuild its background with the family solver before any inpainting (methodology section 4a), "
                 "and fit an accepted sibling's text recipe instead of measuring its lettering by hand (section 10). "
                 "Reuse glossary/context already saved in the request. "
                 "No mandatory user sign-off for every image. "
@@ -2252,12 +2286,16 @@ class ImageService:
             raise ValueError(
                 "Copy a scoped " + kind + " task before refreshing its report."
             )
+        if not _current_request(entry):
+            raise ValueError(
+                "This image task was copied by an earlier version of DazedTL, so its report is not read. Copy the task again."
+            )
         if value[kind].get("status") == "stopped":
             raise ValueError(
                 "This investigation was stopped to choose the images yourself, so its report is no longer read. Copy the investigation again to start a new one."
             )
         root = self.record(project_id)[1]
-        request = read_json(project_path(root, entry["path"]), limit=48_000_000)
+        request = read_work_json(project_path(root, entry["path"]))
         if (
             digest(request) != entry["hash"]
             or request.get("projectId") != project_id
@@ -2280,7 +2318,7 @@ class ImageService:
                 "state": self.state(project_id),
                 "message": "No results saved yet.",
             }
-        report = read_json(path, limit=48_000_000)
+        report = read_work_json(path)
         if (
             not isinstance(report, dict)
             or report.get("version") != 1

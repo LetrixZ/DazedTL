@@ -538,27 +538,40 @@ class Index:
         if db is None:
             with self.connection() as connection:
                 return self.family(identity, connection)
-        summary = (self.get(identity, db) or {}).get("family")
-        stored = (
-            summary
-            and db.execute(
+        found = self.families_of([identity], db)
+        return next(iter(found.values()), None)
+
+    def families_of(self, identities, db=None):
+        """The families these images belong to by family id, each read once
+        however many of them share it: reading a family of thousands once per
+        member took a task's preparation minutes to write."""
+        if db is None:
+            with self.connection() as connection:
+                return self.families_of(identities, connection)
+        stored, found = {}, {}
+        for identity in identities:
+            summary = (self.get(identity, db) or {}).get("family")
+            if not summary or summary["id"] in stored:
+                continue
+            group = db.execute(
                 "SELECT data FROM family_groups WHERE id=?", (summary["id"],)
             ).fetchone()
-        )
-        if not stored:
-            return None
-        family = json.loads(stored[0])
-        members = []
-        for member in family["members"]:
-            row = self.get(member, db) or {}
-            members.append(
-                {
-                    "id": member,
-                    "original": (row.get("original") or {}).get("path", ""),
-                    "translated": families.translated(row),
-                }
-            )
-        return {**family, "members": members}
+            family = json.loads(group[0]) if group else None
+            stored[summary["id"]] = family
+            if family is None:
+                continue
+            members = []
+            for member in family["members"]:
+                row = self.get(member, db) or {}
+                members.append(
+                    {
+                        "id": member,
+                        "original": (row.get("original") or {}).get("path", ""),
+                        "translated": families.translated(row),
+                    }
+                )
+            found[summary["id"]] = {**family, "members": members}
+        return found
 
     def folders(self):
         within, values = self.within()
