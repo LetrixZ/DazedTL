@@ -108,7 +108,7 @@ WOLF_ARCHIVES = {
 WOLF_KEYS = {"game", "list", "data2", "gamefile", "basicdata2"}
 NEEDS_DUMP = {
     ".ybn", ".pck", ".utoc", ".ucas", ".assets", ".bundle", ".unity3d",
-    ".dts", ".nsa", ".sar", ".dxa", ".pfs",
+    ".dts", ".nsa", ".sar", ".dxa", ".pfs", ".sec5",
 }  # fmt: skip
 # Archives whose index the census reads: only those holding scripts or text
 # need a decoded dump, so pictures, music and voices are never decoded.

@@ -852,6 +852,8 @@ class CensusTests(unittest.TestCase):
             unity["needs_dump"],
             ["Game_Data/Managed/Assembly-CSharp.dll", "Game_Data/level0"],
         )
+        sas5 = scan({"game.sec5": b"SEC5", "game.iar": b"iar "})
+        self.assertEqual(sas5["needs_dump"], ["game.sec5"])
 
     def test_decoded_scripts_take_rules_and_other_languages_are_set_aside(self):
         # YU-RIS media archives hold no text, so only scripts need decoding.
