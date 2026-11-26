@@ -494,6 +494,11 @@ nothing. Drop the tag and let the base text stand. Where the two do differ, the
 gloss has to be re-expressed some other way (a parenthetical, or folded into the
 line) - it cannot stay as ruby over a multi-letter word.
 
+So never list a `[ruby text="..."]` tag among a unit's protected tokens: its
+reading is Japanese the line translates or drops. Protected, it stays Japanese in
+the English, the line reads as untranslated and is sent again; one game paid for
+a second run this way.
+
 ## The message box is state, not a constant
 
 In AjinSyoujyo, `show_mesL` / `S` / `H` / `T` in `system/macro.ks` each `[position]` the

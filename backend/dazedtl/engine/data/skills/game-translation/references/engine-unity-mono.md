@@ -206,6 +206,8 @@ long tail of individually-sized widgets, not the fix for dialogue.
 The Images steps read and write loose PNGs, so for Unity they run on the folder you exported the textures to (`images --scan --root <folder>`).
 The game never reads that folder: an image Images reports applied is in the folder only, and its `install` says so, until you write it back into the serialized file the game loads.
 
+- Name each exported texture by its assets file and path ID, and write it back by both.
+  A path ID is unique only within one file, so another file can hold a different texture under the same ID; in Kaikanko Osawari Densha, a repack keyed on the ID alone painted 7 textures into the wrong file.
 - Write only the pixels.
   A `Texture2D` whose `m_StreamData` names a `.resS` file keeps its pixels at that offset and size: encode the edit in the texture's own format and size and write those bytes at that offset, leaving every other byte alone.
 - Never save a whole serialized file you loaded to change one object.
