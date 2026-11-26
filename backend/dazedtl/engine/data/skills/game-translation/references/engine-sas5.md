@@ -54,7 +54,7 @@ Rewrite all of these:
 - `OPTN/EXPORT_FUNS`, the engine's event handlers, and OPTN labels.
 
 A build that misses some can start and fail later: stale `EXPORT_FUNS` entries send pause, key, mouse and screen events into unrelated bytes, so check them first when Settings or menus break.
-Never search `CODE` for values that look like addresses, and never parse the translated file for text; build from the original.
+Never search `CODE` for values that look like addresses, and never parse the translated file for text; build from the original, which the game's Git keeps under `refs/dazedtl/originals`, since an installed `.sec5` has its addresses moved.
 `sas5_text.py check` must report an identical rebuild and no unmapped address before translation starts.
 
 ## Locale

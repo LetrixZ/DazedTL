@@ -480,7 +480,12 @@ class Sec5:
                 count = len(data).to_bytes(size, "little")
                 edits += [(field, field + size, count), (start, end, data)]
             else:
-                raise SAS5Error(f"No unit {unit}.")
+                # A file already patched has its addresses moved.
+                raise SAS5Error(
+                    f"No unit {unit} in this file. Build from the original .sec5 "
+                    "your units came from, which the game's Git keeps under "
+                    "refs/dazedtl/originals, never from a patched one."
+                )
         edits.sort()
         starts = [start for start, _, _ in edits]
         shifts = [0, *accumulate(len(data) - (end - start) for start, end, data in edits)]

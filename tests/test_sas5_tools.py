@@ -92,6 +92,10 @@ class Sas5TextTests(unittest.TestCase):
         found = {unit["kind"]: unit["text"] for unit in new.units()}
         self.assertEqual(found["string"], translations[units["string"]])
         self.assertEqual(found["message"], translations[units["message"]])
+        # The installed, patched file has its addresses moved, so building
+        # from it refuses, naming the original to build from.
+        with self.assertRaisesRegex(text.SAS5Error, "Build from the original"):
+            new.rebuild(translations, 932)
 
     def test_older_files_jump_through_19_with_wider_lengths(self):
         head = b"\x1b\x02\x00\x01" + u32(6) + b"\x19" + u32(0) + b"\xff\xff" + LINE
