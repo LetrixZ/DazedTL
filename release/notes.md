@@ -16,10 +16,14 @@
 
 - **Translate:** an OpenRouter Batch on a Google model no longer fails every request with "Invalid response_json_schema".
 - **Translate:** a Batch run no longer stops with "status failed (HTTP 404)" over a batch OpenRouter had just accepted.
+- **Translate:** a Batch run no longer fails with its sent requests unread when the glossary or guidance is edited while it waits.
 - **Translate:** an Assistant-led run no longer fails a whole request over one line that broke a code, and says how many lines it kept untranslated.
 - **Text QA:** ordinary Japanese-to-English lines are no longer flagged for an unusual length, nor "Scene 1" as a number mismatch.
 - **Release:** the playtest plays common-event stops, skips battles a game ships no enemy art for, and accepts a censor mask Text QA keeps.
 - **Release:** the playtest's fixes reach the game when nothing new breaks, even beside a problem no fix removes.
+- **Release:** the playtest no longer lists MZ's splash screen as a plugin screen, nor blames Game End on a title started from pictures.
+- **Release:** a game whose text is all in its images can be packaged.
+- **Release:** the assistant's patch no longer leaves out a file it translated without saying so.
 - **Images:** an image applied to a decoded folder no longer reads as in the game, nor as changed when its report is read again.
 - **Images:** an image task names each variant family once, so copying a big game's investigation task no longer fails as too large.
-- **Release:** the assistant's patch waits for a GameUpdate repository instead of shipping the updater without one.
+- **Release:** the assistant's patch waits for a GameUpdate repository instead of shipping the updater without one, or builds once GameUpdate is off.
