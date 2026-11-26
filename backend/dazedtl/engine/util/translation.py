@@ -614,9 +614,16 @@ def content_text(text, protected=()):
     text = str(text)
     if not CONTENT_TEXT:
         return text.strip()
+    return without_protected_codes(without_tokens(text, protected)).strip()
+
+
+def without_tokens(text, protected=()):
+    """*text* without the literal *protected* tokens a request names, such as
+    a game's ⟦P0⟧ mask or a Japanese marker the engine reads, like a choice's
+    _ロック: a translation keeps them as the source holds them."""
     for token in sorted(set(protected), key=len, reverse=True):
         text = text.replace(token, "")
-    return without_protected_codes(text).strip()
+    return text
 
 
 def validate_translation_content(
@@ -716,8 +723,13 @@ def validate_translation_content(
             # translation keep the source's punctuation, kaomoji and censor
             # masks, and a Chinese target the kanji it shares. Japanese
             # inside protected runtime-code parameters is absent here and is
-            # restored only after validation.
-            if source_left(trans_str, orig_str, target=target_language):
+            # restored only after validation. A literal protected token is
+            # kept as the source holds it, so it is never left text.
+            if source_left(
+                without_tokens(trans_str, tokens),
+                without_tokens(orig_str, tokens),
+                target=target_language,
+            ):
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Source-language text remains in translation")
                 continue

@@ -369,6 +369,7 @@ class TranslationTests(unittest.TestCase):
             "stop": "ここで休もう。",
             "sokuon": "あっ、【P0】を見て。",
             "slash": "\\ヘレンが来た。",
+            "lock": "クロネにお願いする_ロック",
         }
         accepted = {
             "apostrophe": "It’s fine.",
@@ -376,13 +377,18 @@ class TranslationTests(unittest.TestCase):
             "stop": "Let's rest here。",
             "sokuon": "Ahっ, look at 【P0】.",
             "slash": "\\Helen has come.",
+            "lock": "Ask Kurone_ロック",
         }
         row = logical_request(
             {
                 "id": "scene",
                 "sources": sources,
-                # A protected token keeps its spelling.
-                "constraints": {"sokuon": {"tokens": ["【P0】"]}},
+                # A protected token keeps its spelling, even one in the
+                # source language, such as a choice's lock marker.
+                "constraints": {
+                    "sokuon": {"tokens": ["【P0】"]},
+                    "lock": {"tokens": ["_ロック"]},
+                },
             },
             {"user": ""},
         )
@@ -399,6 +405,7 @@ class TranslationTests(unittest.TestCase):
             "stop": "Let's rest here.",
             "sokuon": "Ah, look at 【P0】.",
             "slash": "\\\\Helen has come.",
+            "lock": "Ask Kurone_ロック",
         }
 
         def exported(quotes=True):
