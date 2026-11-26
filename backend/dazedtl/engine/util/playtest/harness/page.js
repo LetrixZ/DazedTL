@@ -12,9 +12,12 @@
   // Errors from a plugin that needs NW.js, which this browser lacks.
   const NEEDS_NWJS =
     /\b(?:require|nw|process|global|__dirname|__filename)\b is not defined|reading '(?:Window|App|Shell|Clipboard)'/;
+  // The scenes of MV's rpg_scenes.js and MZ's rmmz_scenes.js, such as MZ
+  // 1.10's Scene_Splash, its optional splash screen.
   const ENGINE_SCENES = new Set([
     "Scene_Base",
     "Scene_Boot",
+    "Scene_Splash",
     "Scene_Title",
     "Scene_Message",
     "Scene_Map",
