@@ -360,4 +360,21 @@ test("A Batch run offers accepting its results only when some finished and some 
     canAcceptResults(run([done], { resultsCollected: true, remaining: 4 })),
     true,
   );
+  // A save that failed only on requests the provider ended with an error
+  // saves the rest once accepted; a complete run never offers it.
+  const failedSave = { resultsCollected: true, providerFailed: 1 };
+  assert.equal(
+    canAcceptResults({ ...run([done], failedSave), status: "failed" }),
+    true,
+  );
+  assert.equal(
+    canAcceptResults({ ...run([done], failedSave), status: "complete" }),
+    false,
+  );
+  assert.equal(
+    canAcceptResults(
+      run([done], { ...failedSave, providerFailed: 0, remaining: 0 }),
+    ),
+    false,
+  );
 });

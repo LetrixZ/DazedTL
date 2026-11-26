@@ -52,10 +52,19 @@ export function AcceptBatchResultsDialog({
           The {requests(value.returned)} the finished Batches translated are
           saved, and Apply writes them into the game.
         </p>
-        <p>
-          Left out: {left.join(", ")}. Their lines keep their original text, and
-          Translate prepares a new estimate for them only.
-        </p>
+        {value.pending || value.unsent ? (
+          <p>
+            Left out: {left.join(", ")}. Their lines keep their original text,
+            and Translate prepares a new estimate for them only.
+          </p>
+        ) : (
+          <p>
+            {requests(value.failed)} failed at the provider and{" "}
+            {value.failed === 1 ? "keeps its" : "keep their"} original text.
+            Nothing is sent again now; Translate prepares a new estimate for{" "}
+            {value.failed === 1 ? "it" : "them"} only.
+          </p>
+        )}
         {value.pendingBatches > 0 && (
           <p>
             {value.cancels

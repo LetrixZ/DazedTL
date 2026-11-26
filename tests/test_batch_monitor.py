@@ -622,6 +622,97 @@ class BatchMonitorTests(unittest.TestCase):
             provider.submit.assert_not_called()
             self.assertTrue(read_json(root / "log/batch_state.json")["accepted"])
 
+    def test_a_failed_save_saves_its_results_once_accepted_without_sending(self):
+        # A save that failed on a request the provider ended with an error
+        # stranded the results already paid for: accepting saves them, the
+        # failed request's lines keeping their source text, and sends nothing.
+        from dazedtl.translation.guided_inspection import RunInspection
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            monitor, job, _ = self.fixture(root)
+            batch = {
+                "id": "paid",
+                "provider": "openai",
+                "api_status": "completed",
+                "custom_ids": {"one": "key", "two": "failed"},
+                "request_counts": {"total": 2, "succeeded": 1, "errored": 1},
+                "provider_errors": [{"custom_id": "two", "message": "error"}],
+            }
+            write_json(root / "log/batch_history.json", {"batches": [batch]})
+            write_json(root / "log/batch_results.json", {"key": {"text": "ok"}})
+            write_json(
+                root / "log/batch_state.json",
+                {"status": "fetched", "batches": [batch], "batch_ids": ["paid"]},
+            )
+            write_json(
+                root / "log/batch_requests.json",
+                {
+                    key: {"payload": '{"Line1":"薬"}', "params": {}}
+                    for key in ("key", "failed")
+                },
+            )
+            job.update(status="failed", dazedtl_approved=True, files=["Map001.json"])
+            monitor.consumed.add("run")  # Its save failed.
+            guided = monitor.guided
+            guided.batch_monitor = monitor
+            guided.batch_confirmations = {}
+            guided.record = lambda _: (None, {"id": "native"})
+            guided.owned_runs = lambda _: {"run"}
+            inspection = RunInspection(guided)
+            process = {
+                "batches": [
+                    {
+                        "id": "paid",
+                        "status": "completed",
+                        "counts": {"succeeded": 1, "errored": 1},
+                    }
+                ]
+            }
+            provider = Mock()
+            provider.status.return_value = {
+                "api_status": "completed",
+                "counts": {"succeeded": 1, "errored": 1},
+            }
+            provider.collect_terminal.return_value = (
+                {"key": {"text": "ok"}},
+                {"two": "error"},
+                {},
+            )
+            with (
+                patch.object(inspection, "run_view", return_value={"process": process}),
+                patch.object(
+                    batch_control, "TranslationProvider", return_value=provider
+                ),
+            ):
+                value = inspection.batch_accept_preview("project", "run")
+                self.assertEqual(
+                    [value[key] for key in ("returned", "failed", "pending", "unsent")],
+                    [1, 1, 0, 0],
+                )
+                inspection.batch_accept("project", value["token"])
+                monitor.tick()
+                # Accepted once, it is not offered again.
+                with self.assertRaisesRegex(ValueError, "already being saved"):
+                    inspection.acceptance({"id": "native"}, "run")
+            monitor.backend.manual.consume_batch.assert_called_once_with("run")
+            provider.submit.assert_not_called()
+            provider.live.assert_not_called()
+            state = read_json(root / "log/batch_state.json")
+            self.assertEqual((state["status"], state["accepted"]), ("fetched", True))
+            # With every result present, a failed save is not accepting's.
+            job.update(status="failed", dazedtl_batch_accepted=False)
+            write_json(
+                root / "log/batch_results.json",
+                {"key": {"text": "ok"}, "failed": {"text": "late"}},
+            )
+            write_json(root / "log/batch_state.json", {"status": "fetched"})
+            with (
+                patch.object(inspection, "run_view", return_value={"process": process}),
+                self.assertRaisesRegex(ValueError, "already saved its results"),
+            ):
+                inspection.acceptance({"id": "native"}, "run")
+
     def test_approved_remainder_continues_once_but_stopped_or_superseded_runs_do_not(
         self,
     ):

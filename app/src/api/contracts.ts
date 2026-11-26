@@ -302,6 +302,7 @@ export type RunProcess = {
   monitoring?: BatchMonitoring;
   resultsCollected?: boolean;
   resultsAccepted?: boolean;
+  providerFailed?: number;
   fileMetrics?: Record<string, FileMetric>;
   mode?: string;
   prepared?: number;

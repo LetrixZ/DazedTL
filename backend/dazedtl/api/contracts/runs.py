@@ -239,6 +239,10 @@ class RunProcess(TypedDict):
     # The user accepted the run's results so far; it saves what its ended
     # Batches returned and leaves the rest untranslated.
     resultsAccepted: NotRequired[bool]
+    # A failed save's requests the provider ended with an error, when those
+    # alone have no result: accepting saves the rest (process_view
+    # provider_failed).
+    providerFailed: NotRequired[int]
     fileMetrics: NotRequired[dict[str, FileMetric]]
     mode: NotRequired[str]
     prepared: NotRequired[int]

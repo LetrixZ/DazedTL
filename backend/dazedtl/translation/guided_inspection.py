@@ -565,8 +565,9 @@ class RunInspection:
         """What accepting a Guided Batch run's results so far covers: its
         ended Batches' results are saved, failed lines and the requests of
         Batches still working or never sent keep their source text, and a
-        later run translates them. Refuses a run with nothing to accept or
-        nothing left out."""
+        later run translates them, as do the requests a provider failed when
+        they alone kept a run's save from finishing. Refuses a run with
+        nothing to accept or nothing left out."""
         if (
             run_id not in self.guided.owned_runs(native)
             or run_id not in self.guided.backend.manual.jobs
@@ -576,7 +577,12 @@ class RunInspection:
         plan = self.guided.backend.saved_run_configuration(run_id)
         from dazedtl.compatibility.batch_control import unsent_requests
         from dazedtl.compatibility.preparations import temporary
-        from dazedtl.compatibility.process_view import BATCH_ENDED, accepted, saved
+        from dazedtl.compatibility.process_view import (
+            BATCH_ENDED,
+            accepted,
+            provider_failed,
+            saved,
+        )
 
         if (
             job.get("mode") != "batch"
@@ -590,15 +596,19 @@ class RunInspection:
             raise ValueError("This run's results so far are already being saved.")
         root = self.guided.backend.manual.folder(run_id)
         state = saved(root, "batch_state.json").get("status")
+        # A failed save whose missing results are requests the provider
+        # ended with an error.
+        failures = provider_failed(root, job) if state == "fetched" else 0
         if (
             job.get("status") == "complete"
             or state not in {"submitted", "partially_submitted", "fetched"}
             # Collected results wait to be accepted only while requests were
-            # never sent; saving them has begun otherwise.
+            # never sent or the provider failed the rest; saving them has
+            # begun otherwise.
             or state == "fetched"
             and (
                 accepted(root)
-                or not unsent_requests(root)
+                or not (failures or unsent_requests(root))
                 or self.guided.backend.manual.controller(run_id).running()
             )
         ):
@@ -617,10 +627,13 @@ class RunInspection:
         ended = [batch for batch in batches if batch["status"] in BATCH_ENDED]
         working = [batch for batch in batches if batch["status"] not in BATCH_ENDED]
         returned = sum(count(batch, "succeeded") for batch in ended)
-        failed = sum(
-            count(batch, key)
-            for batch in ended
-            for key in ("errored", "expired", "canceled")
+        failed = max(
+            failures,
+            sum(
+                count(batch, key)
+                for batch in ended
+                for key in ("errored", "expired", "canceled")
+            ),
         )
         pending = sum(batch.get("total") or count(batch, "total") for batch in working)
         unsent = process.get("remaining") or 0
@@ -681,6 +694,8 @@ class RunInspection:
             manual.stop(run_id)
         monitor = self.guided.batch_monitor
         monitor.settled.discard(run_id)
+        # A run whose save failed is saved again.
+        monitor.consumed.discard(run_id)
         monitor.views.pop(run_id, None)
         monitor.wake.set()
         return self.run_view(run_id)

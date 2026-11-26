@@ -306,6 +306,53 @@ class BatchControlTests(unittest.TestCase):
                 {"key-a": {"text": '{"Line1":"Medicine"}'}},
             )
 
+    def test_a_failed_save_is_savable_only_when_the_provider_failed_the_rest(self):
+        # Accepting a failed save keeps the missing requests' lines in their
+        # source text, so it is offered only when each was sent and its
+        # provider ended it with an error: never for a request never sent, a
+        # paid result not downloaded, a complete run or one with no result.
+        batch = {
+            "id": "paid",
+            "provider": "openrouter",
+            "api_status": "completed",
+            "custom_ids": {"one": "key", "two": "failed"},
+            "provider_errors": [{"custom_id": "two", "message": "error"}],
+        }
+        cases = [
+            ("provider failed the rest", {}, {}, 1),
+            ("run complete", {"status": "complete"}, {}, 0),
+            ("already accepted", {"dazedtl_batch_accepted": True}, {}, 0),
+            ("every result present", {}, {"results": ["key", "failed"]}, 0),
+            ("no result at all", {}, {"results": []}, 0),
+            ("a paid result missing", {}, {"batch": {"provider_errors": []}}, 0),
+            ("a request never sent", {}, {"queue": ["key", "failed", "new"]}, 0),
+            ("collection not ended", {}, {"state": "submitted"}, 0),
+        ]
+        for name, job, change, expected in cases:
+            with self.subTest(name), TemporaryDirectory() as directory:
+                root = Path(directory)
+                sent = {**batch, **change.get("batch", {})}
+                write_json(root / "log/batch_history.json", {"batches": [sent]})
+                write_json(
+                    root / "log/batch_state.json",
+                    {"status": change.get("state", "fetched"), "batch_ids": ["paid"]},
+                )
+                write_json(
+                    root / "log/batch_requests.json",
+                    {
+                        key: {"payload": '{"Line1":"薬"}', "params": {}}
+                        for key in change.get("queue", ["key", "failed"])
+                    },
+                )
+                write_json(
+                    root / "log/batch_results.json",
+                    {key: {"text": "ok"} for key in change.get("results", ["key"])},
+                )
+                self.assertEqual(
+                    process_view.provider_failed(root, {"status": "failed", **job}),
+                    expected,
+                )
+
     def test_accepting_refuses_until_an_ended_batch_returned_translations(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

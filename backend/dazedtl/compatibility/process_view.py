@@ -523,6 +523,37 @@ def accepted(root):
     return bool(batch_state(root).get("accepted"))
 
 
+def provider_failed(root, job):
+    """How many prepared requests a failed Batch run's ended Batches sent
+    and their provider ended with an error, when those alone have no result:
+    accepting saves what returned and leaves them their source text
+    (guided_inspection acceptance, batch_evidence kept). Zero otherwise,
+    as when a request was never sent, a paid result was not downloaded, or
+    nothing returned."""
+    if job.get("status") != "failed" or job.get("dazedtl_batch_accepted"):
+        return 0
+    evidence = evidence_root(root)
+    if saved(evidence, "batch_state.json").get("status") != "fetched" or accepted(root):
+        return 0
+    results = batch_results(root)
+    if not results:
+        return 0
+    # A request sent again counts by its latest sending.
+    ended = {}
+    for batch in saved(evidence, "batch_history.json").get("batches", []):
+        if not isinstance(batch.get("custom_ids"), dict):
+            return 0
+        errors = {
+            error.get("custom_id")
+            for error in batch.get("provider_errors") or []
+            if isinstance(error, dict)
+        }
+        for custom, key in batch["custom_ids"].items():
+            ended[key] = batch.get("api_status") in BATCH_ENDED and custom in errors
+    missing = set(queue(root)) - set(results)
+    return len(missing) if missing and all(ended.get(key) for key in missing) else 0
+
+
 def batch_state(root):
     from .batch_evidence import ARCHIVE
 
@@ -1503,6 +1534,7 @@ def summary(root, job, view=None):
         ),
         "resultsCollected": batch_state(root).get("status") == "fetched",
         "resultsAccepted": bool(job.get("dazedtl_batch_accepted")),
+        "providerFailed": provider_failed(root, job) if batches else 0,
         "sourceItems": sum(
             len(json.loads(entry["payload"])) for entry in requests.values()
         )
