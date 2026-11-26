@@ -456,6 +456,33 @@ try:
         # Setup read saved guesses such as a cameo's 存子 "Sonko" as approved
         # spellings; they now say they were translated without their story.
         assert "Unverified nameplate" in saved_names, saved_names
+        # A Batch consume writes Actors.json before Skills.json, whose \N[16]
+        # then read the translated name: its requests no longer matched the
+        # ones collected, and the file's paid results were lost. A Batch reads
+        # the run's inputs in both phases; a Live run keeps the translation.
+        actors = temporary / "actor-names"
+        for folder, actor in (("files", "リンプル"), ("translated", "Rimple")):
+            (actors / folder).mkdir(parents=True)
+            (actors / folder / "Actors.json").write_text(
+                json.dumps([None, {"id": 16, "name": actor}], ensure_ascii=False),
+                "utf-8",
+            )
+        directory = os.getcwd()
+        os.chdir(actors)
+        try:
+            for phase, actor in (
+                ("collect", "リンプル"),
+                ("consume", "リンプル"),
+                ("", "Rimple"),
+            ):
+                with (
+                    patch.dict(os.environ, {"BATCH_PHASE": phase}),
+                    patch.object(parser, "_ACTOR_MAP_CACHE", None),
+                    patch.object(parser, "AUTONAMEPOPUP101", False),
+                ):
+                    assert parser._get_actor_map()[16] == actor, phase
+        finally:
+            os.chdir(directory)
         # Each engine module ended a file whose parser returned an error its
         # own way: most printed a ✗ receipt and returned a TOTAL, so the run
         # read the file translated with part of it written, and its worker

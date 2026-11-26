@@ -7196,7 +7196,10 @@ def _get_actor_map() -> dict:
         if _ACTOR_MAP_CACHE is not None:
             return _ACTOR_MAP_CACHE
         candidates = (Path("files/Actors.json"), Path("translated/Actors.json"))
-        if not AUTONAMEPOPUP101:
+        # A Batch's consume rebuilds the requests its collection built, so
+        # both read the names the run's inputs hold: the consume writes the
+        # translated Actors.json before a later file's requests are rebuilt.
+        if not AUTONAMEPOPUP101 and _batch_phase() not in {"collect", "consume"}:
             candidates = tuple(reversed(candidates))
         for candidate in candidates:
             if candidate.is_file():

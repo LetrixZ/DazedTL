@@ -1137,6 +1137,44 @@ class ProcessTests(unittest.TestCase):
                 ["Potion", "Poison"],
             )
             self.assertEqual(sent, [["毒"]])
+            # A Batch consume finds each paid result by the payload collect
+            # submitted. A consume whose save failed had saved the lines of
+            # the requests it read, and the next rebuilt a later request that
+            # repeats one of them without it: its result was lost and the file
+            # failed. Consume sends each call whole; a call every line of which
+            # is saved still needs no request.
+            consume_root = Path(temporary) / "consume"
+            write_json(consume_root / "files/Items.json", data)
+            collected, consumed = [["薬", "毒"], ["毒", "塩"]], []
+
+            def consume():
+                consuming = translator()
+                consuming.get_batch_phase = lambda: "consume"
+                consuming.require_batch_result = point(lambda *_: None)
+                consuming.cache_translation = point(lambda *_: None)
+                consuming.translateAI = point(
+                    lambda text, history, filename: (
+                        consumed.append(text)
+                        or [
+                            [{"薬": "Potion", "毒": "Poison"}.get(v, v) for v in text],
+                            [0, 0],
+                        ]
+                    )
+                )
+                Evidence(consume_root, "batch", {"workflow": plan["workflow"]}).install(
+                    consuming
+                )
+                for call in collected:
+                    consuming.translateAI(call, [], "Items.json")
+                return consuming
+
+            consume()
+            self.assertEqual(consumed, collected)
+            consumed.clear()
+            self.assertEqual(
+                consume().translateAI(["薬"], [], "Items.json")[0], ["Potion"]
+            )
+            self.assertEqual(consumed, [["毒", "塩"]])
             # A run frozen with the source-text v2 policy reuses no saved line
             # the response check reads as left, such as one an older build
             # saved with Japanese in it, which the engine sends again: the

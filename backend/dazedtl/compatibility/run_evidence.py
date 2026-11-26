@@ -772,7 +772,15 @@ class Evidence:
                 output = [cast(dict, row)["response"] for row in reused]
                 return [output if isinstance(text, list) else output[0], [0, 0]]
             saved = [row["response"] if row is not None else None for row in reused]
-            if isinstance(text, list) and any(value is not None for value in saved):
+            # A Batch consume rebuilds the requests collect submitted, whose
+            # paid results are found by their payloads: leaving reused lines
+            # out of one would change its payload, and its result would be
+            # lost (tests/test_batch_control request stability).
+            if (
+                isinstance(text, list)
+                and any(value is not None for value in saved)
+                and translation.get_batch_phase() != "consume"
+            ):
                 return remaining(native, call_signature.bind(*args, **kwargs), saved)
             previous = getattr(self.local, "call", None)
             self.local.call = []
