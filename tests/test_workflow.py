@@ -1351,6 +1351,35 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertEqual(counted["runs"], 1)
 
+    def test_a_census_that_counts_no_text_needs_no_units_to_package(self):
+        # A game whose copy is all artwork has nothing to extract, organize
+        # takes no units file without units, and packaging asked for
+        # organize --complete, so such a game could never be packaged.
+        (self.game / "source.json").unlink()
+        (self.game / "data").mkdir()
+
+        def census(events):
+            write_json(self.game / "data/Map001.json", {"events": events})
+            original_files.record(self.game, original_files.PREPARED)
+            return take_census(
+                self.engine,
+                self.profile,
+                self.identity,
+                self.game,
+                lifecycle(self.profile, self.identity),
+                None,
+                lambda: False,
+                lambda _message: None,
+            )["runs"]
+
+        self.assertEqual(census([None]), 0)
+        self.service.require_inventory(self.identity, 0)
+        # Text the census counts still needs its units.
+        page = [{"code": 401, "indent": 0, "parameters": ["はい。"]}]
+        self.assertEqual(census([None, {"name": "", "pages": [{"list": page}]}]), 1)
+        with self.assertRaisesRegex(ValueError, "whole census extracted"):
+            self.service.require_inventory(self.identity, 0)
+
     def test_complete_needs_the_tools_census_covered_not_the_assistants_word(self):
         def line(code, *parameters):
             return {"code": code, "indent": 0, "parameters": list(parameters)}

@@ -1218,6 +1218,15 @@ def _every(census):
     return [*census["entries"], *census.get("unsent", ())]
 
 
+def counts_nothing(census):
+    """Whether *census* found no text to extract, as in a game whose copy is
+    all artwork: no run, unsent lines included, and no file it asks a
+    decoded dump for."""
+    return not census.get("needs_dump") and not any(
+        entry["runs"] for entry in _every(census)
+    )
+
+
 def fields(census):
     result = {}
     for entry in _every(census):

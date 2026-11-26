@@ -80,9 +80,9 @@ Scope is mechanical: DazedTL counts the original game's Japanese text itself, fr
 - Built-in rules set aside text players never see, such as comments, labels, asset names and readmes; comment lines a game's plugins show players, such as MPP_ChoiceEX's choice help, are player text ([rpgmaker_markers](../backend/dazedtl/engine/util/rpgmaker_markers.py)).
 - The assistant can add rules in `.dazedtl/len-method/work/scope-rules.json`: version 1, with rules of `kind`, `field` and `reason` (asset_name, identifier, comment, script_code, not_displayed or other_language), each optionally limited to a `file` pattern or exact `values`.
   Rules never set aside dialogue, choices, names or other text players read in formats DazedTL reads itself.
-- `census-uncovered.json` lists each uncovered location, and apart from those, each line of Japanese punctuation without letters that no unit holds.
-- `organize --complete` is refused without a current census, while archives still need a decoded dump, or while anything is uncovered, and packaging needs `organize --complete` against the latest census.
-  A game update or a new census version makes the census stale until it runs again.
+- `census-uncovered.json` lists each uncovered location and each line of Japanese punctuation without letters that no unit holds.
+- `organize --complete` is refused without a current census, while archives still need a decoded dump, or while anything is uncovered, and packaging needs it against the latest census, unless that found no text.
+  A game update or new census version makes the census stale until it runs again.
 - Content is never a reason to leave text out: the assistant [declines](#declined-requests) a request it won't translate, which keeps its lines in scope.
 
 ## Source plan

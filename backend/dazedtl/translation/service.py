@@ -35,6 +35,7 @@ from dazedtl.storage import write_bytes, write_json
 
 from . import (
     backups,
+    census,
     checkpoint_records,
     delivery,
     exchange,
@@ -72,6 +73,7 @@ from .helper_command import (
 )
 from .jobs import Jobs, declined_message, finished_message, now
 from .operations import (
+    census_path,
     census_stale,
     checkout_issue,
     lifecycle,
@@ -1346,6 +1348,10 @@ Additional project instructions:
         except ValueError, OSError:
             inventory = None
         if not inventory or not names_census(self.workspace, project_id, inventory):
+            if self._counts_nothing(project_id):
+                # A game whose copy is all artwork has no text to extract,
+                # and organize takes no units file without units.
+                return
             raise PackageRefusal(
                 "Package needs the whole census extracted: run organize --complete with your units after the latest census.",
                 "Your assistant finishes extracting the game's text first.",
@@ -1355,6 +1361,15 @@ Additional project instructions:
                 f"The text export counts {translated:,} lines, fewer than the {inventory['units']:,} organize --complete accepted. Export every unit before packaging.",
                 "Your assistant saves every translated line first.",
             )
+
+    def _counts_nothing(self, project_id):
+        """Whether the saved census found no text in the game (census
+        counts_nothing); False without one."""
+        try:
+            counted = read_json(census_path(self.workspace, project_id))
+        except ValueError, OSError:
+            return False
+        return census.counts_nothing(counted)
 
     def patch_manifest(self, project_id):
         """The runtime manifest a patch is built from, which Git setup
