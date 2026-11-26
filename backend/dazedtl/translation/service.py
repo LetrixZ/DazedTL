@@ -114,6 +114,12 @@ from .window_title import WindowTitle
 # The lifecycle record's fields the renderer reads; a ZIP's file stamps stay
 # in the backend, which compares them.
 DELIVERY_FIELDS = ("path", "commit", "game_version", "updater_stamp", "files")
+# What binds Text QA's corrections of a units game to its files again once
+# one changed, such as a guidance edit after translating (correct_lines).
+REORGANIZE = (
+    "Organize the units again, which keeps every translation, then apply the "
+    "corrections again."
+)
 
 
 def lifecycle_view(state):
@@ -1473,16 +1479,26 @@ Additional project instructions:
             dict.fromkeys(refusal.reason for refusal in self.unfinished(project_id))
         )
 
-    def validate_current(self, project_id, plan, *, compiled=True, index=None):
+    def validate_current(
+        self,
+        project_id,
+        plan,
+        *,
+        compiled=True,
+        index=None,
+        step="Compile and review a new request plan.",
+    ):
         """Refuses a plan its project, sources or baseline no longer match.
         With compiled, it also compiles its requests again to compare them,
-        which takes seconds on a big plan, or only the one at index."""
+        which takes seconds on a big plan, or only the one at index. A changed
+        source or guidance file is refused naming *step*, which binds the
+        work to the files again."""
         _record, project = self.project(project_id)
         if scope(project.read()["options"]) != plan["scope_sha256"]:
             raise ValueError(
                 "The project scope changed. Compile and review a new plan."
             )
-        verify_evidence(project.root, plan["evidence"])
+        verify_evidence(project.root, plan["evidence"], step)
         self.engine.verify_bindings(project.root, plan["original_bindings"])
         require_run_baseline(
             self.engine, project.root, plan, lifecycle(self.workspace, project_id)
@@ -1959,7 +1975,7 @@ Additional project instructions:
         for fingerprint, lines in grouped.items():
             if fingerprint in own:
                 index = own[fingerprint]
-                self.validate_current(project_id, plan, index=index)
+                self.validate_current(project_id, plan, index=index, step=REORGANIZE)
                 request, kept = plan["requests"][index], None
                 if job["states"][request["id"]]["state"] in {
                     "sending",
@@ -1974,7 +1990,7 @@ Additional project instructions:
                 and (found := self.reused_request(project_id, plan, fingerprint))
                 is not None
             ):
-                self.validate_current(project_id, plan, compiled=False)
+                self.validate_current(project_id, plan, compiled=False, step=REORGANIZE)
                 request, identities = found
                 if units is None:
                     units = organize.laid_out(plan["source"], plan["input_path"])

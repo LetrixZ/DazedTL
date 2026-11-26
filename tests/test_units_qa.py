@@ -314,6 +314,29 @@ class UnitsTextQATests(unittest.TestCase):
         self.assertTrue(state["applied"])
         self.assertEqual(self.english()["a/1"], "The inn is a hundred gold, yeah.")
 
+    def test_apply_after_a_guidance_edit_says_to_organize_again(self):
+        # An edit to quirks.md after translating refused apply with "Compile
+        # and review a new request plan", which no QA step does; organizing
+        # again keeps every translation, and the task applies through it.
+        quirks = self.game / ".dazedtl/skills/quirks.md"
+        quirks.parent.mkdir(parents=True, exist_ok=True)
+        quirks.write_bytes(b"Keep honorifics.\n")
+        self.translate(
+            [{"id": "b/1", "scene": "b", "source": "おやすみなさい。"}],
+            {"b/1": "Good mornin."},
+        )
+        task = Path(self.step("prepare")["task"])
+        review(task, {"Good mornin.": "Good night."})
+        quirks.write_bytes(b"Keep honorifics. Spell out numbers.\n")
+        with self.assertRaisesRegex(ValueError, r"quirks\.md\. Organize the units"):
+            self.qa.run(self.identity, "apply")
+        self.assertEqual(self.english()["b/1"], "Good mornin.")
+        self.prepared(
+            self.service.organize(self.identity, WORK + "/work/source-units.json")
+        )
+        self.assertTrue(self.step("apply")["applied"])
+        self.assertEqual(self.english()["b/1"], "Good night.")
+
     def test_qa_refuses_a_correction_the_receipt_check_refuses(self):
         # QA accepted a correction that accept refuses in a receipt, so the
         # task's apply failed on it.
