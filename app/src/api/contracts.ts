@@ -928,6 +928,8 @@ translations, for an engine Text QA can't read. */
 export type TextQaCheck = {
   /** The project-relative file listing each hit. */
   report: string;
+  /** The project-relative export it checked, which accept updates. */
+  read: string;
   /** Exported units with a translation. */
   lines: number;
   /** Hits: one per rule and distinct line. */

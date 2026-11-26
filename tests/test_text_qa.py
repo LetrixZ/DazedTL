@@ -614,6 +614,9 @@ class TextQATests(unittest.TestCase):
             state = service.check("project")
             _close_contracts()
             TypeAdapter(TextQaCheck).validate_json(json.dumps(state), strict=True)
+            # It names the export it read, which an assistant's own corrected
+            # file never reaches.
+            self.assertEqual(state["read"], WORK + "/work/translation-units.json")
             self.assertEqual(
                 (state["lines"], state["open"], state["rules"]),
                 (

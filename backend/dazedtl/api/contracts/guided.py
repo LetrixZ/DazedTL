@@ -599,6 +599,9 @@ class TextQaCheck(TypedDict):
     translations, for an engine Text QA can't read."""
 
     report: Annotated[str, "The project-relative file listing each hit."]
+    read: Annotated[
+        str, "The project-relative export it checked, which accept updates."
+    ]
     lines: Annotated[int, "Exported units with a translation."]
     hits: Annotated[int, "Hits: one per rule and distinct line."]
     open: Annotated[int, "Hits neither corrected nor answered."]

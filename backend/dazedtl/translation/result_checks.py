@@ -18,7 +18,7 @@ from dazedtl.storage import write_json
 
 from .files import digest, project_path, read_json
 from .project import WORK
-from .results import exported_translations
+from .results import EXPORT, exported_translations
 
 CHECK_FILE = WORK + "/work/qa-check.json"
 # The rules a report's hits are found by: 1, Text QA's mechanical flags, its
@@ -34,13 +34,15 @@ GLOSSARY_HINT = "glossary"
 # What the assistant does about the hits, which the starting prompt's QA
 # step also says.
 CHECK_STEP = (
-    "Run qa --check, which checks your exported translations with Text QA's "
+    "Run qa --check, which checks the translations you accepted, as DazedTL "
+    f"exports them to {EXPORT}, with Text QA's "
     "text-only rules, such as glossary terms, numbers and codes kept, text "
     "left untranslated, censor masks, pronouns against the glossary's genders "
     f"and suspicious length, and lists each hit in {CHECK_FILE} "
     "with its units. Correct a wrong line with a correction receipt that "
     "carries its request's current result_sha256 as replaces_sha256, accept "
-    "it and inject it again; answer a line that is right with qa --check "
+    "it and inject it again, since a line changed only in your own files never "
+    "reaches the check; answer a line that is right with qa --check "
     "--answers FILE, a JSON object of hit ID to a one-line reason. Run it "
     "again until no hit is open."
 )
@@ -224,6 +226,8 @@ def check(root, source_language, target, answers=None):
         following = "No hit is open; go on with the qa step."
     return {
         "report": CHECK_FILE,
+        # What it checked: the accepted translations as DazedTL exports them.
+        "read": EXPORT,
         "lines": len(rows),
         "hits": len(found),
         "open": waiting,
