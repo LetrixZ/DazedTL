@@ -2259,6 +2259,58 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("img/menu.png", refusal)
         self.assertNotIn("img/title.png", refusal)
 
+    def test_the_patch_refusal_names_a_translated_file_it_leaves_out(self):
+        # An SAS5 game's album page was translated in the game but never in
+        # its runtime manifest, so the patch shipped without it, and players
+        # kept the Japanese page, with no word from packaging.
+        (self.game / "source.json").unlink()
+        (self.game / "html").mkdir()
+        page = self.game / "html/album.html"
+        page.write_bytes("<p>アルバム</p>\n".encode())
+        save = self.game / "save.dat"
+        save.write_bytes(b"0")
+        write_json(self.game / "manifest.json", [])
+        original_files.record(self.game, original_files.PREPARED)
+        take_census(
+            self.engine,
+            self.profile,
+            self.identity,
+            self.game,
+            lifecycle(self.profile, self.identity),
+            None,
+            lambda: False,
+            lambda _message: None,
+        )
+        self.engine.progress = lambda *_args, **_kwargs: {
+            "phases": {"qa": "complete"},
+            "metrics": {"text": {"total": 1, "translated": 1}},
+        }
+        self.engine.setup_mismatch = lambda *_args: None
+        self.engine.runtime_paths = lambda _manifest: []
+        shipped = []
+        self.engine.patch_files = lambda _root, _manifest: {"files": shipped}
+        self.enterContext(patch.object(self.service, "require_inventory"))
+        self.enterContext(
+            patch.object(self.service, "patch_manifest", return_value="manifest.json")
+        )
+
+        def left_out():
+            return [
+                str(refusal)
+                for refusal in self.service.unfinished(self.identity)
+                if "changed from its original" in str(refusal)
+            ]
+
+        self.assertEqual(left_out(), [])
+        # A file the game writes as it runs holds no text the census counted.
+        page.write_bytes(b"<p>Album</p>\n")
+        save.write_bytes(b"1")
+        (refusal,) = left_out()
+        self.assertIn("html/album.html", refusal)
+        self.assertNotIn("save.dat", refusal)
+        shipped.append("html/album.html")
+        self.assertEqual(left_out(), [])
+
     def test_the_assistants_patch_waits_for_a_gameupdate_repository(self):
         # The assistant's package shipped the updater with no repository to
         # update from, which only the Release review refused.

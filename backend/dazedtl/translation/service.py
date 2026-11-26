@@ -1456,15 +1456,60 @@ Additional project instructions:
         from util.version_update.git_workflow import GitWorkflowError
 
         try:
-            paths = self.engine.runtime_paths(runtime_manifest(project.root, manifest))
+            document = runtime_manifest(project.root, manifest)
+            paths = self.engine.runtime_paths(document)
         except OSError, ValueError, GitWorkflowError:
             # Packaging, which reads the manifest, says what is wrong with it.
-            paths = []
+            paths, document = [], None
+        if document is not None and (
+            left := self._left_out(project_id, project.root, document)
+        ):
+            unmet.append(
+                PackageRefusal(
+                    "The game holds "
+                    + ", ".join(left[:5])
+                    + (" and more" if len(left) > 5 else "")
+                    + " changed from its original, but the patch leaves "
+                    + ("it" if len(left) == 1 else "them")
+                    + " out, so players would keep the original text. Add "
+                    + ("it" if len(left) == 1 else "each")
+                    + " to the runtime manifest, or restore the original.",
+                    "Your assistant puts every file it translated in the patch first.",
+                )
+            )
         if refusal := hook_probes.require(
             self.workspace, project_id, project.root, paths
         ):
             unmet.append(PackageRefusal(*refusal))
         return unmet
+
+    def _left_out(self, project_id, root, manifest):
+        """The game's files the census counted text in that no longer match
+        the prepared original but that the patch of *manifest* leaves out, as
+        a translated page the manifest never named; files a game writes as it
+        runs, such as saves and logs, hold no counted text."""
+        from util.version_update.git_workflow import GitWorkflowError
+
+        try:
+            counted = read_json(census_path(self.workspace, project_id))
+            snapshot = originals.prepared(self.workspace, project_id, root)
+            if snapshot is None:
+                return []
+            texts = {
+                entry["file"]
+                for entry in counted["entries"]
+                if entry["source"] == "tool"
+                and entry["file"] in snapshot.files
+                and (Path(root) / entry["file"]).is_file()
+            }
+            if not texts:
+                return []
+            shipped = set(self.engine.patch_files(root, manifest)["files"])
+            names = sorted(texts - shipped)
+            found = snapshot.identify(root, names) if names else {}
+        except ValueError, OSError, KeyError, GitWorkflowError:
+            return []
+        return [name for name in names if found.get(name) != snapshot.files[name]]
 
     def _images_left(self, project_id):
         """The images the Image Manager's records count but no apply put in
