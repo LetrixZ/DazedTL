@@ -541,6 +541,26 @@ from util.runtime_text import (
 )
 
 
+def _shown_name_codes(values, name_maps):
+    """*values* with each line's substituted name codes written as their names.
+
+    A request shows ``\\N[ID]`` / ``\\V[ID]`` as the actor's name, and a reply
+    may write the name or the code. Control-code validation reads both alike
+    by showing the code as the name; *name_maps* is each line's name-to-code
+    map from util/actor_names.substitute, or None for a line without one.
+    """
+    if not name_maps:
+        return values
+    from util.actor_names import show_codes
+
+    if isinstance(values, list):
+        return [
+            show_codes(value, name_maps[j] if j < len(name_maps) else {})
+            for j, value in enumerate(values)
+        ]
+    return show_codes(values, name_maps[0] if name_maps else {})
+
+
 def validate_placeholders(original_text, translated_text, replacements):
     """
     Validate that all placeholders from the original text appear in the translation.
@@ -6215,7 +6235,7 @@ def _retry_delay(error):
 @_retry_live_translation
 def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                 mismatchList=None, context_kind=None, request_instructions=None,
-                glossary_names=(), line_files=None):
+                glossary_names=(), line_files=None, name_codes=None):
     """
     Main translation entry point used by all modules.
 
@@ -6227,6 +6247,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
     ``line_files`` lists, for each line of a call gathering lines of several
     files (map display names), the files that line belongs to; a rejected
     chunk adds its lines' files to ``mismatchList`` instead of ``filename``.
+    ``name_codes`` lists, for each line, the name-to-code map the caller
+    substituted before this call (util/actor_names.substitute), so validation
+    reads a reply's code and its shown name alike.
 
     While a chunk's request is built, ``_thread_local.request_lines`` holds
     the positions in ``text`` of the lines it sends, for run records: a chunk
@@ -6289,6 +6312,12 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
         tList = batchList(text, chunk_size)
         if line_files is not None and len(line_files) != len(text):
             line_files = None
+        if (
+            name_codes is not None
+            and not isinstance(name_codes, dict)
+            and len(name_codes) != len(text)
+        ):
+            name_codes = None
     else:
         formatType = "json"
         chunk_size = 1
@@ -6336,6 +6365,14 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             request_history, persistent_instructions
         )
         is_map_name_batch = _is_map_name_batch(persistent_instructions)
+        if name_codes is None:
+            chunk_name_codes = None
+        elif isinstance(name_codes, dict):
+            chunk_name_codes = [name_codes]
+        else:
+            start = index * chunk_size
+            count = len(tItem) if isinstance(tItem, list) else 1
+            chunk_name_codes = list(name_codes[start : start + count])
         # Check if text contains target language
         if not re.search(config.langRegex, str(tItem)):
             if pbar is not None:
@@ -6469,6 +6506,20 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             clean_tItem = [tItem[j] for j in range(len(tItem)) if j not in skip_indices]
         else:
             clean_tItem = tItem
+        if chunk_name_codes is None:
+            clean_name_codes = None
+        elif (
+            isinstance(tItem, list)
+            and skip_indices
+            and len(chunk_name_codes) == len(tItem)
+        ):
+            clean_name_codes = [
+                chunk_name_codes[j]
+                for j in range(len(tItem))
+                if j not in skip_indices
+            ]
+        else:
+            clean_name_codes = chunk_name_codes
 
         # Format for translation
         if isinstance(tItem, list):
@@ -6517,7 +6568,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
             cached_values = cached_result if isinstance(cached_result, list) else [cached_result]
             source_values = clean_tItem if isinstance(clean_tItem, list) else [clean_tItem]
             controls_ok, _control_errors = validate_control_codes(
-                source_values, cached_values, all_replacements
+                _shown_name_codes(source_values, clean_name_codes),
+                _shown_name_codes(cached_values, clean_name_codes),
+                all_replacements,
             )
             protected_source_values = (
                 protected_items if isinstance(protected_items, list) else [protected_items]
@@ -6882,7 +6935,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                 for j, line in enumerate(extracted)
                             ]
                             control_valid, control_reasons = validate_control_codes(
-                                clean_tItem, restored_for_validation, all_replacements
+                                _shown_name_codes(clean_tItem, clean_name_codes),
+                                _shown_name_codes(
+                                    restored_for_validation, clean_name_codes
+                                ),
+                                all_replacements,
                             )
                             if not control_valid:
                                 is_valid = False
@@ -6992,7 +7049,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None,
                                 extracted, all_replacements[0]
                             )
                             control_valid, control_reasons = validate_control_codes(
-                                tItem, restored_for_validation, all_replacements
+                                _shown_name_codes(tItem, clean_name_codes),
+                                _shown_name_codes(
+                                    restored_for_validation, clean_name_codes
+                                ),
+                                all_replacements,
                             )
                             if not control_valid:
                                 is_valid = False

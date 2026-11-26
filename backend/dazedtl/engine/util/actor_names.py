@@ -144,7 +144,8 @@ def substitute(
     Returns ``(substituted_text, reverse_map)`` where *reverse_map* maps the
     exact display name back to the original control code for restore. With
     *speaker_tag*, the pattern of a speaker label's inside, a leading
-    ``[Speaker]:`` label shows names too but restores none.
+    ``[Speaker]:`` label shows names too and keeps their codes, so a body
+    that already carries the shown name restores it as well.
     """
 
     variable_name = variable_name or (lambda _identity: None)
@@ -162,13 +163,6 @@ def substitute(
             if re.search(r"\\[nNvV]\[\d+\]$", chunk[: match.start()]):
                 return f" {name}"
         return name
-
-    def _display(name_of: NameOf) -> Callable[[re.Match], str]:
-        def display(m: re.Match) -> str:
-            name = name_of(int(m.group(1)))
-            return name if name else m.group(0)
-
-        return display
 
     def _repl(m: re.Match, chunk: str, name_of: NameOf) -> str:
         name = name_of(int(m.group(1)))
@@ -192,8 +186,13 @@ def substitute(
         )
     )
     if tag_match:
-        speaker = ACTOR_CODE.sub(_display(actor_name), tag_match.group("speaker"))
-        speaker = VARIABLE_CODE.sub(_display(variable_name), speaker)
+        label = tag_match.group("speaker")
+        speaker = ACTOR_CODE.sub(
+            lambda m: _repl(m, label, actor_name), label
+        )
+        speaker = VARIABLE_CODE.sub(
+            lambda m: _repl(m, speaker, variable_name), speaker
+        )
         body = _body(text[tag_match.end() :])
         return (
             f"{tag_match.group('open')}{speaker}{tag_match.group('close')}{body}",
@@ -237,6 +236,31 @@ def restore(
         return glued.sub(_replace, text)
     text = glued.sub(_replace, text)
     return bounded.sub(_replace, text)
+
+
+def show_codes(text: str, reverse_map: dict[str, str]) -> str:
+    """Write each code in *reverse_map*'s values back as the name it stood for.
+
+    A request shows ``\\N[ID]`` / ``\\V[ID]`` as the actor's name, but a reply
+    may write the code instead. Validation compares control codes, so the
+    code and its name must read alike there: this shows the code as the same
+    name ``restore`` would turn back into the code, and leaves every other
+    code as it is. Codes the request did not substitute stay untouched.
+    """
+    if not isinstance(text, str) or not reverse_map:
+        return text
+    for name, code in sorted(
+        reverse_map.items(), key=lambda row: len(row[1]), reverse=True
+    ):
+        match = re.fullmatch(r"([\\]+)([nNvV])\s*\[\s*(\d+)\s*\]", str(code))
+        if not match:
+            continue
+        slashes, kind, identity = match.groups()
+        pattern = re.compile(
+            rf"{re.escape(slashes)}{kind}\s*\[\s*{identity}\s*\]", re.IGNORECASE
+        )
+        text = pattern.sub(lambda _match, shown=name: shown, text)
+    return text
 
 
 def shown(

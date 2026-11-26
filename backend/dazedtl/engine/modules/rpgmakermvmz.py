@@ -4136,6 +4136,9 @@ def _searchCodes(page, pbar, jobList, filename):
     # The first (355) line of the script the current 655 line continues.
     scriptHeader = ""
     speaker = ""
+    # The name the request's [Speaker]: prefix carries: a code-locked
+    # nameplate's code, else the translated name.
+    speakerCode = ""
     speakerID = None
     # From LEFT_ROWS level 6, the rows of the message or scrolling text the
     # walk is in and the texts it sends of it (`_block_sends`).
@@ -4327,6 +4330,8 @@ def _searchCodes(page, pbar, jobList, filename):
                 speakerList = list(speakerMatch.names) if speakerMatch else []
                 inlineSpeakerMatch = speakerMatch.inline if speakerMatch else None
 
+                speaker_codes = []
+                code_locked = []
                 # Replace Speaker
                 if len(speakerList) != 0:
                     # Drop plugin/control codes from the nameplate used for glossary
@@ -4336,15 +4341,18 @@ def _searchCodes(page, pbar, jobList, filename):
                     # actor-name scripts for \v) and must not be rewritten into the 401
                     # parameter - the game still resolves them at runtime.
                     resolved_speakers = []
-                    code_locked = []
                     for raw_speaker in speakerList:
                         display = _speaker_display_name(raw_speaker)
                         resolved = _resolve_code_speaker_name(display)
                         if resolved:
                             resolved_speakers.append(resolved)
+                            # The code stays the transport prefix, so the
+                            # request still substitutes and restores it.
+                            speaker_codes.append(display)
                             code_locked.append(True)
                         else:
                             resolved_speakers.append(display)
+                            speaker_codes.append("")
                             code_locked.append(False)
                     speakerList = resolved_speakers
                     # Check if speaker+dialogue are on same line
@@ -4419,6 +4427,16 @@ def _searchCodes(page, pbar, jobList, filename):
                         jaString = codeList[i]["parameters"][0]
                         groupStart = i
 
+                # A code-locked nameplate keeps its code as the transport
+                # prefix: translateAI shows the actor's name to the model and
+                # restores the code, so a reply that writes either the name or
+                # the code validates and the game keeps its runtime name.
+                speakerCode = (
+                    speaker_codes[0]
+                    if speakerList and code_locked and code_locked[0]
+                    else speaker
+                )
+
                 # Using this to keep track of 401's in a row (display text for Pass 2 formatting).
                 currentGroup.append(jaString)
 
@@ -4451,6 +4469,7 @@ def _searchCodes(page, pbar, jobList, filename):
                         if not setData:
                             _write_unsent_rows(codeList, groupStart, i, rawSource)
                         speaker = ""
+                        speakerCode = ""
                         i += 1
                         continue
 
@@ -4552,8 +4571,12 @@ def _searchCodes(page, pbar, jobList, filename):
                     # Pass 1 (Grabbing Data)
                     if setData:
                         # Append
-                        historyEntry = _message_entry(finalJAString, speaker)
+                        historyEntry = _message_entry(finalJAString, speakerCode)
+                        # History keeps the shown name, as the request's own
+                        # lines do after substitution, not the code.
+                        historyLine = _message_entry(finalJAString, speaker)
                         speaker = ""
+                        speakerCode = ""
                         match = []
                         nametag = ""
                         currentGroup = []
@@ -4562,17 +4585,20 @@ def _searchCodes(page, pbar, jobList, filename):
                         if historyEntry is not None:
                             list401.append(historyEntry)
                             # Keep textHistory list at length maxHistory
-                            textHistory.append('"' + historyEntry + '"')
+                            textHistory.append(
+                                '"' + (historyLine or historyEntry) + '"'
+                            )
                             if len(textHistory) > maxHistory:
                                 textHistory.pop(0)
 
                     # Pass 2 (Setting Data)
                     else:
                         # Grab Translated String
-                        sent = _message_entry(finalJAString, speaker)
+                        sent = _message_entry(finalJAString, speakerCode)
                         if sent is None:
                             # Pass 1 sent nothing, so no reply is this text's.
                             speaker = ""
+                            speakerCode = ""
                             nametag = ""
                         elif len(list401) > 0 and list401[0] is None:
                             # Left untranslated (reply_to_write), its rows
@@ -4580,6 +4606,7 @@ def _searchCodes(page, pbar, jobList, filename):
                             syncIndex = i + 1
                             reduceWidthFlag = False
                             speaker = ""
+                            speakerCode = ""
                             match = []
                             nametag = ""
                             endtag = ""
@@ -4593,7 +4620,9 @@ def _searchCodes(page, pbar, jobList, filename):
                             translatedText = list401[0]
 
                             # Remove the speaker label it was sent with
-                            translatedText = strip_speaker_prefix(translatedText, speaker)
+                            translatedText = strip_speaker_prefix(
+                                translatedText, speakerCode
+                            )
 
                             # Its full stops and spacing, as both methods
                             # write a message (util/rpgmaker_blocks).
@@ -4689,6 +4718,7 @@ def _searchCodes(page, pbar, jobList, filename):
 
                             # Reset
                             speaker = ""
+                            speakerCode = ""
                             match = []
                             currentGroup = []
                             list401.pop(0)
@@ -7426,6 +7456,7 @@ def translateAI(text, history, history_ctx=None, *, glossary_names=(), filename=
         mismatchList=MISMATCH,
         glossary_names=glossary_names,
         line_files=line_files,
+        name_codes=item_reverses if isinstance(sources, list) else reverse,
     )
     THREAD_CTX.last_translation_had_mismatch = last_translation_had_mismatch()
 
@@ -7438,7 +7469,14 @@ def translateAI(text, history, history_ctx=None, *, glossary_names=(), filename=
                 restored.append(actor_names.restore(s, reverse_map))
             result[0] = restored
         elif isinstance(result[0], str):
-            reverse_map = item_reverses[0] if item_reverses else reverse
+            if item_reverses:
+                # A list call that fell back to one string still holds every
+                # line's names; keep each map, not only the first line's.
+                reverse_map = {}
+                for item_reverse in item_reverses:
+                    reverse_map.update(item_reverse)
+            else:
+                reverse_map = reverse
             result[0] = actor_names.restore(result[0], reverse_map)
 
     # ── Exact QA lint fixes, before callers wrap the text ──────────────────

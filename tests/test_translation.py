@@ -793,6 +793,45 @@ class TranslationTests(unittest.TestCase):
             {"u1": "\\N[1] came with \\N[2] and \\N[1].", "u2": "\\N[3] stayed."},
         )
 
+    def test_a_reply_may_write_an_actors_name_code_where_its_name_was_shown(self):
+        # Requests show \N[1] as the actor's name, but a reply may write the
+        # code instead. Control-code validation must read both alike, while a
+        # code the request did not substitute stays an extra code.
+        from util import actor_names
+        from util.runtime_text import validate_control_codes
+
+        names = {"Aoi": "\\N[1]"}
+        source = "[Aoi]: I'm Aoi. Aoi will go."
+        self.assertEqual(
+            actor_names.show_codes("[\\N[1]]: I'm \\N[1]. Aoi will go.", names),
+            source,
+        )
+        # Any case or spacing the model writes for the same code reads the same.
+        self.assertEqual(
+            actor_names.show_codes("[\\n [ 1 ]]: I'm Aoi.", names),
+            "[Aoi]: I'm Aoi.",
+        )
+        self.assertTrue(validate_control_codes([source], [source])[0])
+        self.assertTrue(
+            validate_control_codes(
+                [source],
+                [actor_names.show_codes("[\\N[1]]: I'm \\N[1].", names)],
+            )[0]
+        )
+        self.assertFalse(validate_control_codes([source], ["[\\N[2]]: I'm Aoi."])[0])
+        # A code-locked nameplate's code stays in the map even when the body
+        # already carries the name, so a preserved line restores both.
+        from util.speakers import SPEAKER_BRACKET_INNER
+
+        shown, codes = actor_names.substitute(
+            "[\\N[1]]: Aoi is here.",
+            lambda actor: "Aoi" if actor == 1 else None,
+            speaker_tag=SPEAKER_BRACKET_INNER,
+        )
+        self.assertEqual(shown, "[Aoi]: Aoi is here.")
+        self.assertEqual(codes, {"Aoi": "\\N[1]"})
+        self.assertEqual(actor_names.restore(shown, codes), "[\\N[1]]: \\N[1] is here.")
+
     def test_reviewed_correction_retains_history_and_rejects_a_stale_result_hash(self):
         row = request()
         results = Results(self.game)

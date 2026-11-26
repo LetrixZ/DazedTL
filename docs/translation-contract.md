@@ -110,7 +110,7 @@ A plan written by hand compiles the same way with `compile --input`, `plan-forma
 - `request --run ID --index N`, or `--request-sha256`, shows a request, its fingerprint and any accepted result.
 - An agent's receipt holds `request_sha256` and `translations`, an object with exactly the requested IDs and string values; save it in the game workspace and pass its path to `accept`.
 - accept rejects missing, duplicate, unexpected or empty lines, a line that fails Guided's content check ([validate_translation_content](../backend/dazedtl/engine/util/translation.py)), and one that changes its source's control codes or the scopes they open and close (`validate_unmasked_control_codes` in [runtime_text](../backend/dazedtl/engine/util/runtime_text.py)); only a ruby or a `TEXT_CODE` argument may change.
-  Where a request shows a name code as the actor's name, writing the name is accepted.
+  Where a request shows a name code as the actor's name, writing the name or the code is accepted.
 - An API run keeps a rejected line in its source text and accepts the rest of its request ([results](../backend/dazedtl/translation/results.py) `kept`); a request with no passing line fails, and nothing is sent again by itself.
 - A correction supplies `replaces_sha256` equal to the current `result_sha256`: the previous result is archived, and review, injection and QA of the changed lines become pending.
   A line organize kept from an earlier request is corrected through the run that kept it (`reused_request` in [service](../backend/dazedtl/translation/service.py)).
