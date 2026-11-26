@@ -1347,7 +1347,7 @@ class TranslationEngine:
         from util.paths import GAME_TOOL_ARCHIVE_EXCLUDES
         from util.version_update.git_workflow import _run_git
 
-        from dazedtl.translation.release import player_permissions
+        from dazedtl.translation.release import UPDATER_OMITTED, player_permissions
 
         source = Path(source)
         status = self.git_status(source, options)
@@ -1433,6 +1433,11 @@ class TranslationEngine:
             "game_version": status["original_version"],
             "files": len(packaged),
             "updater_stamp": bool(patch_sha),
+            # What the branch tracks that the ZIP leaves out, and why, as
+            # Release's review of a patch says (release.patch_summary).
+            "omitted": [
+                {"path": name, "reason": UPDATER_OMITTED} for name in sorted(omitted)
+            ],
             # The game's files it was built from, which freshness compares.
             "paths": [name for name in packaged if name in tracked],
         }

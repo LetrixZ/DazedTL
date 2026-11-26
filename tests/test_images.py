@@ -1716,9 +1716,38 @@ class DecodedImagePatchTests(unittest.TestCase):
         )
         with zipfile.ZipFile(built["path"]) as archive:
             self.assertEqual(archive.namelist(), ["data/", "data/Map001.json"])
+        self.assertEqual(built["omitted"], [])
         delivery = {**built, "stamp": stamp(built["path"])}
         delivery.update(basis(self.game, delivery.pop("paths")))
         self.assertTrue(current(delivery, self.game))
+
+    def test_a_patch_names_the_gameupdate_config_it_leaves_out(self):
+        # The assistant's patch left GameUpdate's config out without a word,
+        # so an assistant added it to its runtime manifest, which only sent
+        # QA to record again; Release's review names it, with why.
+        write_bytes(self.game / "gameupdate/patch-config.txt", b"repo=fixture\n")
+        self.git("add", "-f", "gameupdate/patch-config.txt")
+        self.git(
+            "-c",
+            "user.name=DazedTL tests",
+            "-c",
+            "user.email=tests@dazedtl.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "GameUpdate's config",
+        )
+        built = self.engine.package(
+            self.game,
+            {"mode": "agent", "install_gameupdate": True},
+            self.manifest,
+            self.game.parent / "deliveries",
+        )
+        self.assertEqual(
+            [row["path"] for row in built["omitted"]], ["gameupdate/patch-config.txt"]
+        )
+        with zipfile.ZipFile(built["path"]) as archive:
+            self.assertNotIn("gameupdate/patch-config.txt", archive.namelist())
 
     def test_kirikiri_bmp_and_tlg_images_are_applied_in_their_own_format(self):
         # KiriKiri games keep title screens and eye-catches as BMP or TLG
