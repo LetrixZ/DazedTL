@@ -131,8 +131,10 @@ class GameUpdate:
         self.sync(project_id)
         current = self.state(project_id)
         if current["state"] == "needs_repo":
+            # A local patch needs no repository: without GameUpdate, which
+            # Options install by default, it builds as it is.
             raise ValueError(
-                "Enter the GameUpdate repository on the Project page's Game updates tab before building."
+                "Enter the GameUpdate repository on the Project page's Game updates tab before building, or for a patch without updates, turn GameUpdate off in Options and set the game up again, which takes it out."
             )
         if current["state"] == "pending":
             raise ValueError(
