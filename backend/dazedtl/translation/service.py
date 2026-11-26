@@ -1403,7 +1403,8 @@ Additional project instructions:
         if progress.get("warnings") or progress["phases"].get("qa") != "complete":
             unmet.append(
                 PackageRefusal(
-                    "Complete and record current QA evidence before packaging the translation.",
+                    "Complete and record current QA evidence before packaging the translation. "
+                    "Until then only the user can build the patch, from Release, whose review lists what it is built without.",
                     "The patch waits for your assistant's QA.",
                 )
             )
