@@ -74,6 +74,9 @@ LAYOUT_SAMPLES = {
 }
 OPENING_SECONDS = 120
 BATTLE_SECONDS = 60
+# How long a title may keep its command window hidden before the tour reads
+# it as one it can't choose from, as a title started from pictures.
+HIDDEN_TITLE_SECONDS = 3
 # Problems an engine scene shows in its standard help or message window,
 # where shorter text fixes them; anywhere else the window is the game's own.
 _ENGINE_SCENES = frozenset({
@@ -165,6 +168,7 @@ def tour(
         + [{"id": TOUR[-1][0], "title": TOUR[-1][1]}],
         "opening": OPENING_SECONDS,
         "battle": BATTLE_SECONDS,
+        "hidden_title": HIDDEN_TITLE_SECONDS,
         "battlebacks": battlebacks(web),
         "battlers": battlers(web),
         "source": reading(),

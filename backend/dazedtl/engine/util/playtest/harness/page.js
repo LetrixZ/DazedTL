@@ -1063,6 +1063,35 @@
 
   const stops = {};
 
+  // What a stop says of a title that keeps its command window hidden, as
+  // one started from picture buttons does: the tour chooses from the window.
+  const HIDDEN_TITLE =
+    "The title keeps its command window hidden, as a title started from pictures does, so the tour could not choose from it.";
+
+  /** Whether the title's command window is `ready` within `seconds`. A
+   * title that keeps it hidden for `hidden` seconds, as one started from
+   * picture buttons does, ends the wait early (titleHidden). */
+  async function titleReady(seconds, ready, hidden) {
+    let since = 0;
+    const commands = () => isScene("Scene_Title") && scene()._commandWindow;
+    await until(() => {
+      const window_ = commands();
+      if (window_ && window_.visible === false) {
+        since ||= Date.now();
+        return Date.now() - since >= hidden * 1000;
+      }
+      since = 0;
+      return Boolean(window_) && ready(window_);
+    }, seconds);
+    const window_ = commands();
+    return Boolean(window_) && window_.visible !== false && ready(window_);
+  }
+
+  function titleHidden() {
+    const window_ = isScene("Scene_Title") && scene()._commandWindow;
+    return Boolean(window_) && window_.visible === false;
+  }
+
   stops.title = async () => {
     const ready = await until(
       () =>
@@ -1075,12 +1104,14 @@
     return { status: "done", note: sceneName() };
   };
 
-  stops["new-game"] = async () => {
+  stops["new-game"] = async (options = {}) => {
     if (isScene("Scene_Title") && scene()._commandWindow) {
-      await until(
-        () => scene()._commandWindow.isOpen() && scene()._commandWindow.active,
+      const ready = await titleReady(
         20,
+        (window_) => window_.isOpen() && window_.active,
+        options.hidden_title ?? 3,
       );
+      if (!ready && titleHidden()) return { status: "failed", note: HIDDEN_TITLE };
       await choose(scene()._commandWindow, "newGame");
     } else if (!isScene("Scene_Map")) {
       await press("ok");
@@ -1317,7 +1348,7 @@
     return { status: "done", note: [...new Set(opened)].join(", ") };
   };
 
-  stops["save-load"] = async () => {
+  stops["save-load"] = async (options = {}) => {
     if (!$gameSystem.isSaveEnabled()) $gameSystem.enableSave();
     const at = { map: $gameMap.mapId(), x: $gamePlayer.x, y: $gamePlayer.y };
     SceneManager.push(Scene_Save);
@@ -1344,17 +1375,16 @@
     await settle();
     await choose(scene()._commandWindow, "toTitle");
     if (
-      !(await until(
-        () =>
-          isScene("Scene_Title") &&
-          scene()._commandWindow &&
-          scene()._commandWindow.active,
+      !(await titleReady(
         30,
+        (window_) => window_.active,
+        options.hidden_title ?? 3,
       ))
     )
       return {
         status: "failed",
-        note: "Game End did not return to the title.",
+        // Game End reached the title, whose Continue the tour can't choose.
+        note: titleHidden() ? HIDDEN_TITLE : "Game End did not return to the title.",
       };
     await settle();
     const title = scene()._commandWindow;
@@ -1781,7 +1811,7 @@
       doing("resume");
       try {
         await stops.title();
-        await stops["new-game"]();
+        await stops["new-game"](config);
         if (plan[resume].id !== "opening") await stops.opening(config);
       } catch (problem) {
         send("stop", {

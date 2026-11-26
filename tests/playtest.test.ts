@@ -16,6 +16,7 @@ const page = fs.readFileSync(
 function game(
   globals: Record<string, unknown> = {},
   blocks: Record<string, unknown> = {},
+  plan: Record<string, unknown> = {},
 ) {
   const listeners: Record<string, ((event: unknown) => void)[]> = {};
   let frame = 0;
@@ -144,6 +145,7 @@ function game(
         stops: [],
         blocks,
         source: { pattern: "[ぁ-ゔァ-ヴ一-龠々〆〤]", placeholders: true },
+        ...plan,
       }),
       send: (type: string, value: Record<string, unknown>) =>
         sent.push({ type, value: structuredClone(value) }),
@@ -210,6 +212,45 @@ function game(
     Window_ChoiceList,
   };
 }
+
+test("a title started from pictures is named, not waited on or blamed on Game End", async () => {
+  // A title that hid its command window behind picture buttons kept the
+  // New Game stop waiting most of a minute, and the save/load stop said
+  // Game End never returned to the title it had reached.
+  const commands = {
+    visible: false,
+    active: false,
+    isOpen: () => false,
+    isOpenAndActive: () => false,
+    findSymbol: () => 0,
+  };
+  const title = Object.assign(Object.create(null), {
+    constructor: { name: "Scene_Title" },
+    children: [],
+    _commandWindow: commands,
+  });
+  const { sent } = game(
+    {
+      SceneManager: {
+        _scene: title,
+        isSceneChanging: () => false,
+        snap: () => ({ canvas: { toDataURL: () => "" } }),
+      },
+    },
+    {},
+    { stops: [{ id: "new-game" }], hidden_title: 0 },
+  );
+  const started = Date.now();
+  while (
+    !sent.some((row) => row.type === "done") &&
+    Date.now() - started < 5000
+  )
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  const stop = sent.find((row) => row.type === "stop");
+  assert.equal(stop?.value.status, "failed");
+  assert.match(String(stop?.value.note), /keeps its command window hidden/);
+  assert.ok(Date.now() - started < 5000);
+});
 
 test("the playtest records text that runs past a window players see", async () => {
   const { playtest, sent, help, hidden, action, message, Window_Base } = game();
