@@ -19,7 +19,14 @@ from dazedtl.storage import write_json
 
 from . import census, name_codes, organize, progress_report, skill_users, unit_results
 from .compilation import batch_sources, compile_requests
-from .files import evidence, project_path, read_json, verify_evidence
+from .files import (
+    GUIDANCE,
+    GUIDANCE_FOLDER,
+    evidence,
+    project_path,
+    read_json,
+    verify_evidence,
+)
 from .jobs import RunStore, now
 from .operations import (
     CENSUS_NAMES,
@@ -191,16 +198,11 @@ def saved_coverage(workspace, project_id, root, state=None):
 def guidance_inputs(source):
     root = Path(source)
     result = []
-    for relative in (
-        ".dazedtl/glossary.txt",
-        ".dazedtl/reference-games.json",
-        ".dazedtl/skills/game.md",
-        ".dazedtl/skills/quirks.md",
-    ):
+    for relative in GUIDANCE:
         path = project_path(root, relative, exists=False)
         if path.is_file():
             result.append(relative)
-    folder = root / ".dazedtl/skills"
+    folder = root / GUIDANCE_FOLDER
     if folder.is_dir():
         result.extend(
             path.relative_to(root).as_posix()

@@ -721,8 +721,8 @@ class BatchWindowTests(unittest.TestCase):
                 store.authorize(job)
                 return job["id"], Provider()
 
-            def step(identity, provider):
-                Runner(store, identity, provider, lambda: None).step()
+            def step(identity, provider, current=lambda: None):
+                Runner(store, identity, provider, current).step()
                 return store.load(identity)[0]
 
             def states(job):
@@ -799,6 +799,31 @@ class BatchWindowTests(unittest.TestCase):
             )
             self.assertEqual(states(failed), ["complete", "rejected", "pending"])
             self.assertEqual(provider.calls, 2)
+
+            # A run the game no longer matches, as after a glossary edit while
+            # its chunks wait at the provider, sends nothing more, but the
+            # chunks it sent, which are paid for, are collected before it ends.
+            changed = "Source or guidance changed: .dazedtl/glossary.txt. Compile and review a new request plan."
+
+            def refused():
+                raise ValueError(changed)
+
+            identity, provider = run("changed", 6, batch_chunks=CHUNK_POLICY)
+            sent = step(identity, provider)
+            self.assertEqual(provider.calls, 4)
+            provider.done.add(sent["batches"][0]["id"])
+            halted = step(identity, provider, refused)
+            self.assertEqual(provider.calls, 4)
+            self.assertEqual(halted["status"], "waiting")
+            self.assertTrue(halted["message"].startswith(changed), halted["message"])
+            provider.done.update(chunk["id"] for chunk in halted["batches"][1:4])
+            failed = step(identity, provider, refused)
+            self.assertEqual((failed["status"], failed["message"]), ("failed", changed))
+            self.assertEqual(
+                [row["state"] for row in failed["states"].values()],
+                [*["accepted"] * 4, "pending", "pending"],
+            )
+            self.assertEqual(provider.calls, 4)
 
             # An uncertain submission stops later sends too and is never sent
             # again, while the chunk sent before it is still collected; the

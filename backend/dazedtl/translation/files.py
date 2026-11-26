@@ -276,6 +276,39 @@ def verify_evidence(root, expected, step="Compile and review a new request plan.
         raise ValueError(f"Source or guidance changed: {named}. {step}")
 
 
+# The game's guidance every request carries: these files, and the Markdown
+# files in GUIDANCE_FOLDER (run_compiler.guidance_inputs).
+GUIDANCE = (
+    ".dazedtl/glossary.txt",
+    ".dazedtl/reference-games.json",
+    ".dazedtl/skills/game.md",
+    ".dazedtl/skills/quirks.md",
+)
+GUIDANCE_FOLDER = ".dazedtl/skills"
+
+
+def guidance_file(relative):
+    """Whether *relative*, a path in a run's evidence, is guidance."""
+    folder, _slash, name = relative.rpartition("/")
+    return relative in GUIDANCE or folder == GUIDANCE_FOLDER and name.endswith(".md")
+
+
+def verify_lines(engine, plan):
+    """Refuses work on the lines a translation run already sent once the
+    files they come from changed. Guidance may change after translating, as
+    organize allows when it reuses a request, and organize rewrites the
+    plan's own input; the lines the IDs name may not change. Only sending a
+    request needs the run's guidance as it was (Runner.validate_current)."""
+    sources = {
+        path: value
+        for path, value in plan["evidence"].items()
+        if not guidance_file(path) and path != plan.get("input_path")
+    }
+    if sources:
+        verify_evidence(plan["source"], sources)
+    engine.verify_bindings(plan["source"], plan["original_bindings"])
+
+
 def write_project_json(root, relative, value):
     path = project_path(root, relative, exists=False)
     write_json(path, value)

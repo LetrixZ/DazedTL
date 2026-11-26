@@ -54,7 +54,14 @@ from . import (
 from .assistant_release import AssistantRelease, PackageRefusal
 from .census import HELP_SEGMENT
 from .compilation import verify_compilation
-from .files import digest, evidence, project_path, read_json, verify_evidence
+from .files import (
+    digest,
+    evidence,
+    project_path,
+    read_json,
+    verify_evidence,
+    verify_lines,
+)
 from .game_update import GameUpdate
 from .helper_command import (
     CONNECTION,
@@ -1588,17 +1595,8 @@ Additional project instructions:
             raise ValueError(
                 "Line IDs repeat across this run's requests. Read each request's result instead."
             )
-        # Guidance may change after translating; the lines the IDs name may not.
-        guidance = set(run_compiler.guidance_inputs(plan["source"]))
-        sources = {
-            path: value
-            for path, value in plan["evidence"].items()
-            if path not in guidance and path != plan["input_path"]
-        }
         try:
-            if sources:
-                verify_evidence(plan["source"], sources)
-            self.engine.verify_bindings(plan["source"], plan["original_bindings"])
+            verify_lines(self.engine, plan)
         except ValueError:
             raise ValueError(
                 "The extracted lines changed since this run was organized. Organize them again; unchanged requests keep their translations."

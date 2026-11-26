@@ -19,7 +19,7 @@ from typing import Any
 from dazedtl.compatibility.checkpoint_commits import Change
 from dazedtl.storage import exclusive, write_json
 from dazedtl.translation import hook_probes
-from dazedtl.translation.files import project_path, read_json, verify_evidence
+from dazedtl.translation.files import project_path, read_json, verify_lines
 from dazedtl.translation.project import MANUAL, WORK
 from dazedtl.translation.results import Results
 
@@ -219,8 +219,8 @@ def refresh(workspace, project_id, engine, plan, *, started=False):
     if not reports(plan):
         return
     source, options = plan["source"], plan["options"]
-    verify_evidence(source, plan["evidence"])
-    engine.verify_bindings(source, plan["original_bindings"])
+    # A run that resumes after a guidance edit collects what it sent.
+    verify_lines(engine, plan)
     with _lock(workspace, project_id):
         report: dict[str, Any] = (
             _last(workspace, project_id, source, _checked(engine, source, options))

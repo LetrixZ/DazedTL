@@ -625,11 +625,10 @@ class Runner:
                 if held:
                     break
                 if not self.submit(chunk):
-                    if self.several and chunk["state"] in {
-                        "queued",
-                        "rejected",
-                        "submitting",
-                    }:
+                    if self.several and (
+                        chunk["state"] in {"queued", "rejected", "submitting"}
+                        or STOPPED_SENDING in self.job
+                    ):
                         if chunk["state"] == "queued":
                             waiting = self.job["message"]
                         break
@@ -909,7 +908,15 @@ class Runner:
             # outside the window's lock, which other runs wait on, and once
             # for the chunks one pass sends.
             if not self.checked:
-                self.validate_current()
+                try:
+                    self.validate_current()
+                except ValueError as error:
+                    if not self.several:
+                        raise
+                    # The chunks in flight were sent as the run froze them and
+                    # are paid for, so they are collected before it ends.
+                    self.halt(str(error))
+                    return False
                 self.checked = True
             with self.room(chunk) as available:
                 if available:

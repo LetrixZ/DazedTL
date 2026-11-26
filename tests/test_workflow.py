@@ -2442,6 +2442,9 @@ class WorkflowTests(unittest.TestCase):
             self.service.operation(self.identity, "package", {})
 
     def test_an_api_run_answers_its_approval_and_keeps_later_questions(self):
+        quirks = self.game / ".dazedtl/skills/quirks.md"
+        quirks.parent.mkdir(parents=True, exist_ok=True)
+        quirks.write_bytes(b"Keep honorifics.\n")
         selected = self.project.read()
         self.service.save(
             self.identity, selected["revision"], {**selected["options"], "mode": "live"}
@@ -2552,6 +2555,14 @@ class WorkflowTests(unittest.TestCase):
                 },
             ),
         )
+        # A guidance edit while the run waits leaves the run reporting, and
+        # so collecting the requests it sent, which are paid for; only a new
+        # send needs the guidance they were sent with.
+        self.assertIn(".dazedtl/skills/quirks.md", plan["evidence"])
+        quirks.write_bytes(b"Keep honorifics. Spell out numbers.\n")
+        progress_report.refresh(self.profile, self.identity, self.engine, plan)
+        with self.assertRaisesRegex(ValueError, "quirks.md"):
+            self.service.validate_current(self.identity, plan, compiled=False)
 
     def test_starting_prompt_runs_text_qa_review_as_options_choose(self):
         # Projects keep Text QA's full review unless Options turn it off.

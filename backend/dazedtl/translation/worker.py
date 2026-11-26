@@ -27,7 +27,7 @@ from dazedtl.settings.execution import worker_secret
 from dazedtl.storage import WorkspaceError, WorkspaceLock
 from dazedtl.translation import progress_report
 from dazedtl.translation.compilation import verify_compilation
-from dazedtl.translation.files import verify_evidence
+from dazedtl.translation.files import verify_evidence, verify_lines
 from dazedtl.translation.jobs import RunStore
 from dazedtl.translation.operations import execute, lifecycle, require_run_baseline
 from dazedtl.translation.ownership import alive
@@ -195,9 +195,9 @@ def run_locked(workspace, identity, store):
                 else:
                     # Republishing the report reads every saved result, and a
                     # Batch can wait for hours, so a poll that changed no
-                    # request only checks that the sources still match.
-                    verify_evidence(plan["source"], plan["evidence"])
-                    engine.verify_bindings(plan["source"], plan["original_bindings"])
+                    # request only checks that the sources still match; the
+                    # guidance its sent requests carry may change meanwhile.
+                    verify_lines(engine, plan)
                 if runner.job["status"] != "waiting":
                     return
                 for _ in range(25):
