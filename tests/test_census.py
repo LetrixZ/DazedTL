@@ -174,6 +174,16 @@ class CensusTests(unittest.TestCase):
                 ("regex", "正規"),
             ],
         )
+        # A minified plugin writes whole Japanese strings as escapes, which
+        # held no Japanese for the census; an escaped backslash starts none.
+        escaped = census.read_code(
+            "js:plugin", r'a = "セーブ"; b = "\\u30bb"; c = "\x41\u{30ed}";'
+        )
+        self.assertEqual(
+            [text for _kind, _at, _field, text in escaped],
+            ["セーブ", r"\\u30bb", "Aロ"],
+        )
+        self.assertEqual(census.read_code("rgss", r'a = "セ"', ruby=True)[0][3], r"セ")
         broken = census.read_code("js", 'a = "閉じない')
         self.assertEqual(broken[0][2], "unparsed")
         self.assertTrue(census.protected("js", "unparsed"))

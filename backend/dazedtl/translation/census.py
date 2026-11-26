@@ -38,7 +38,8 @@ from dazedtl.languages import (
 #    the comment markers a plugin's settings list set aside.
 # 4: lines of Japanese punctuation without letters, listed apart (unsent).
 # 5: the variable names a game's plugins draw, as players read them.
-VERSION = 5
+# 6: JavaScript strings written with \u or \x escapes, as the game shows them.
+VERSION = 6
 
 _RUN = re.compile(source_pattern("census_run", JAPANESE))
 _WORD = re.compile(source_pattern("census_word", JAPANESE))
@@ -481,11 +482,38 @@ def lex_code(text, ruby=False, multiline=False):
     return out
 
 
+# A character JavaScript writes as an escape, as minified plugins write whole
+# Japanese strings, and an escaped backslash, which starts none.
+_JS_ESCAPE = re.compile(
+    r"\\(?:(\\)|u\{([0-9A-Fa-f]{1,6})\}|u([0-9A-Fa-f]{4})|x([0-9A-Fa-f]{2}))"
+)
+
+
+def _js_text(value):
+    """A JavaScript string literal's text with its character escapes read, as
+    the game shows it; other escapes stay as written."""
+
+    def read(match):
+        if match[1]:
+            return match[0]
+        code = int(match[2] or match[3] or match[4], 16)
+        return match[0] if code > 0x10FFFF or 0xD800 <= code <= 0xDFFF else chr(code)
+
+    return _JS_ESCAPE.sub(read, value) if "\\" in value else value
+
+
 def read_code(kind, text, ruby=False, multiline=False):
     """Code's comments and strings; TJS strings, unlike JavaScript's, may
-    span lines."""
+    span lines. A JavaScript string reads as the game shows it, its
+    character escapes read (_js_text)."""
+    script = not ruby and not multiline
     return [
-        (kind, str(offset), field, value)
+        (
+            kind,
+            str(offset),
+            field,
+            _js_text(value) if script and field == "string" else value,
+        )
         for offset, field, value in lex_code(text, ruby, multiline)
     ]
 
