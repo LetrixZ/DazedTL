@@ -128,9 +128,23 @@ async function copy(text: string): Promise<boolean> {
   }
 }
 
+const copyFailed = new Set<(text: string) => void>();
+
+/**
+ * Hands the page a text the browser refused to put on the clipboard, since a
+ * long wait after the click can end the permission to write it.
+ */
+export function onCopyFailed(handler: (text: string) => void) {
+  copyFailed.add(handler);
+  return () => {
+    copyFailed.delete(handler);
+  };
+}
+
 async function copyText(text: string) {
-  if (!(await copy(text)))
-    throw new Error("The text could not be copied. Select it and copy it.");
+  if (await copy(text)) return;
+  for (const handler of copyFailed) handler(text);
+  throw new Error("The text could not be copied. Copy it from the window.");
 }
 
 /** A path on the desktop, typed where the desktop would show a dialog. */

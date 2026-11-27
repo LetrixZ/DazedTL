@@ -6,6 +6,7 @@ import { ErrorBoundary } from "./app/ErrorBoundary";
 import { reportRendererFailure } from "./app/rendererErrors";
 import { PathChoiceProvider } from "./ui/PathChoice";
 import { installWebBridge } from "./web/bridge";
+import { CopyFallback } from "./web/CopyFallback";
 import { TokenGate } from "./web/TokenGate";
 
 // A browser installs its own bridge before anything reads it; the desktop app
@@ -20,6 +21,7 @@ window.addEventListener("unhandledrejection", (event) =>
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary label="The interface">
     <TokenGate>
+      <CopyFallback />
       <PathChoiceProvider>
         <ApplicationProvider>
           <App />
