@@ -51,6 +51,7 @@ so read the Bakin section at the bottom of this file before adapting anything Ba
 | `FModel` | `FModel.exe` (download) | Unreal asset browser |
 | `Wolf` | `wolf_rpg_decode` and `wolf_unpack` (Rust sources; build with `cargo build --release`), `parse_ce.py`/`analyze.py`, `RE/` notes. The IDA `.i64` databases are not bundled | Wolf RPG |
 | `Yuris` | `yuris_text.py` (key, unpack, text and literal units, patch, pack for YPF 200-500 / YSTB through 555) over `yuris_decompiler`, plus a patch suite (locale, font, nameplate, inpaint) | YU-RIS |
+| `SAS5` | `sas5_text.py` (check, units, patch for sec5 107000-110000), `sas5_iar.py` (IAR images to PNG and back) | SAS5 |
 | `Trois` | `dxa_unpack.py`, `find_text_images.py` (OCR), `script_tl.py`, `patch_*.py` | Trois DXA |
 | `Godot` | PCK extract/repack, scene/script patch, vertical-text, save unlock | Godot |
 | `RPGM random obf\Namaiki` | RPGM randomized-obfuscation research | RPG Maker (obfuscated) |

@@ -14,6 +14,10 @@ Grouped because each is a smaller, archive-centric pipeline: **unpack archive â†
 - **Tool:** `tools/Game Archives/Siglus G00-ScenePCK/` (`unpack_g00.py`, `pack_g00.py`, `scene_pck.py`, `decode_scene.py`, `extract_scene_text.py`, `dazed_scene_text_bridge.py`). The reference patch project (Sodom) is not bundled.
 - **Flow (binary, most invasive VN):** unpack `Scene.pck` â†’ story/dialogue/choices. Re-encode + repack after translating (line-wrapping recalculated per width). **Also patch:** `Gameexe.dat` (title/config strings), `SiglusEngine.exe` (engine window text + **DRM/error prompts users see**), `Config.exe` (config-tool UI - easy to miss), and `g00/` UI **image** assets (menus/buttons - visual translation). Ship the whole `GameData/` + `Config.exe` over `StartData/`.
 
+## SAS5 (`*.sec5`, `*.iar`, `*.war`)
+
+This engine has its own reference: [engine-sas5.md](engine-sas5.md).
+
 ## YU-RIS (`*.ypf` archives, `*.ystb` scripts)
 
 - **Tools:** `tools/C++/Yuris/yuris_text.py` over the bundled `yuris_decompiler` reads YPF archives 200-500 and YSTB scripts through 555, and needs `pip install murmurhash2`; run it without arguments for its commands.

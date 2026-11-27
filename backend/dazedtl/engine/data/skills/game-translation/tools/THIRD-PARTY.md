@@ -48,6 +48,9 @@ build output are excluded; see the skill's `README.md` before adapting a referen
 | x64dbg | anywhere | https://x64dbg.com |
 | llama.cpp | anywhere | https://github.com/ggml-org/llama.cpp |
 | w64devkit | anywhere on PATH | https://github.com/skeeto/w64devkit |
+| SAS5OldScriptSimpleTool (sec5 100000-104000 CODE text) | anywhere | https://github.com/julixian/MyVisualNovelTransTools, in `SAS5/`; no license stated, so never copy its code |
+| SAS5Tool (`SecTool` for sec5 108000-110000, `ArcTool` for iar, war and gar) | anywhere | https://github.com/pkuislm/SAS5Tool; no license stated |
+| Niflheim's sec5, iar and gar packers | anywhere | https://github.com/Yggdrasill-Moe/Niflheim, in `StudioSeldomAdventureSystem/`; no license stated |
 | pylivemaker (`lmar`, `lmlsb`, `lmpatch`, `lmgraph`) for LiveMaker | `pip install pylivemaker` | https://github.com/pmrowla/pylivemaker |
 
 ## Referenced but not included
