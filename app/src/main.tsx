@@ -4,6 +4,12 @@ import App from "./app/App";
 import { ApplicationProvider } from "./app/ApplicationProvider";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 import { reportRendererFailure } from "./app/rendererErrors";
+import { installWebBridge } from "./web/bridge";
+import { TokenGate } from "./web/TokenGate";
+
+// A browser installs its own bridge before anything reads it; the desktop app
+// already has the preload's.
+installWebBridge();
 window.addEventListener("error", (event) =>
   reportRendererFailure(event.error, "error"),
 );
@@ -12,8 +18,10 @@ window.addEventListener("unhandledrejection", (event) =>
 );
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary label="The interface">
-    <ApplicationProvider>
-      <App />
-    </ApplicationProvider>
+    <TokenGate>
+      <ApplicationProvider>
+        <App />
+      </ApplicationProvider>
+    </TokenGate>
   </ErrorBoundary>,
 );

@@ -11,6 +11,7 @@ import TranslationDefaults from "./TranslationDefaults";
 import PublishingSettings from "./PublishingSettings";
 import Updates from "./Updates";
 import Notifications from "./Notifications";
+import Remote from "./Remote";
 import Credits from "./Credits";
 import { updateAttention, useUpdates } from "../../app/updates";
 import { RemoveConnection } from "./RemoveConnection";
@@ -34,6 +35,7 @@ const sections = [
   { id: "preferences", label: "Translation defaults" },
   { id: "publishing", label: "Publishing" },
   { id: "notifications", label: "Notifications" },
+  { id: "remote", label: "Remote access" },
   { id: "updates", label: "Updates" },
   { id: "credits", label: "Credits" },
 ] as const;
@@ -52,6 +54,11 @@ export default function Settings({
   const action = useAction();
   const draft = useSettingsDraft(action.report);
   const { config } = draft;
+  // A browser drives another install: it installs no update of its own and
+  // grants no remote access.
+  const available = window.dazedtl.web
+    ? sections.filter((item) => item.id !== "updates" && item.id !== "remote")
+    : sections;
   // Unsaved Publishing edits stay here, so switching tabs keeps them.
   const [publishing, setPublishing] = useState<PublishingValues | null>(null);
   const publishingDirty =
@@ -117,7 +124,7 @@ export default function Settings({
         <Tabs
           id="settings"
           label="Settings sections"
-          items={sections.map((item) =>
+          items={available.map((item) =>
             item.id === "updates" && attention
               ? {
                   ...item,
@@ -424,6 +431,7 @@ export default function Settings({
             />
           ),
           notifications: <Notifications />,
+          remote: <Remote />,
           updates: <Updates running={running} />,
           credits: <Credits />,
         }}
