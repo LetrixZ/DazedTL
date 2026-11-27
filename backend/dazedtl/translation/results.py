@@ -127,6 +127,18 @@ def _content(units):
     ]
 
 
+def _reused_constraints(plan, reused):
+    """The constraints organize gave the units a run kept from earlier
+    requests, by unit ID, read from the units file the run was laid out from
+    (as service.reused_request reads them); a line's protected tokens come
+    from them."""
+    from . import organize
+
+    wanted = set(reused["units"])
+    units = organize.laid_out(plan["source"], plan["input_path"])
+    return {unit["id"]: unit["constraints"] for unit in units if unit["id"] in wanted}
+
+
 def _requests(plan):
     """The requests whose receipts a run's export reads, by fingerprint: its
     own and those answering the units its organize left out."""
@@ -812,16 +824,23 @@ class Results:
                 units.append(row)
         return units
 
-    def reused_units(self, reused, identities, listing, quotes=True):
+    def reused_units(self, reused, identities, listing, quotes=True, constraints=None):
         """The export rows of a run's units its organize left out, which
         earlier requests' receipts answer (translation/unit_results), by
-        unit ID; a unit whose receipt is gone reads left."""
+        unit ID; a unit whose receipt is gone reads left. Each line keeps the
+        protected tokens its constraints name (_reused_constraints), as the
+        run's own requests do."""
         units, read = [], {}
         for identity in identities:
             unit = reused["units"][identity]
             key = unit["request"]
             if key not in read:
                 request = indexed(key, reused["requests"][key])
+                request["constraints"] = {
+                    line: constraints[line]
+                    for line in request["sources"]
+                    if line in (constraints or {})
+                }
                 read[key] = (request, *self._saved(request, listing, quotes))
             request, value, output, left = read[key]
             source = request["sources"][identity]
@@ -915,6 +934,7 @@ class Results:
         # The units organize left out follow, by the receipts that answer them.
         reused = plan.get("reused") or {"units": {}}
         identities = list(reused["units"])
+        constraints = _reused_constraints(plan, reused) if identities else {}
         for start in range(0, len(identities), PART_UNITS):
             group = identities[start : start + PART_UNITS]
             inputs = tuple(
@@ -929,7 +949,12 @@ class Results:
                 for identity in group
             )
             groups.append(
-                (inputs, partial(self.reused_units, reused, group, listing, quotes))
+                (
+                    inputs,
+                    partial(
+                        self.reused_units, reused, group, listing, quotes, constraints
+                    ),
+                )
             )
         # Then the units no request sends, which the tool writes itself.
         converted = plan.get("converted") or {}
