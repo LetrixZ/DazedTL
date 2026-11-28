@@ -2,4 +2,4 @@
 
 ### Added
 
-- **Translate:** Assistant-led knows the SAS5 engine, with tools that rebuild its .sec5 text and .iar images.
+- **Translate:** Assistant-led knows the SAS5 engine, with tools that rebuild its `.sec5` text, `.exe` UI resources and `.iar` images.

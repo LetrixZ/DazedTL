@@ -1606,10 +1606,18 @@ def scan(
             found.extend(entries(rows, name, source, language))
             unsent.extend(entries(rows, name, source, language, marks))
 
+    sas5 = any(PurePosixPath(name).suffix.casefold() == ".sec5" for name in names)
     for count, name in enumerate(names, 1):
         how = candidate(name, head)
         if count % 500 == 0:
             progress(f"Read {count:,} of {len(names):,} files")
+        if how is None and sas5 and PurePosixPath(name).suffix.casefold() == ".exe":
+            folders = [part.casefold() for part in PurePosixPath(name).parts[:-1]]
+            if not any(part in SKIPPED_DIRS or part in TOOL_DIRS for part in folders):
+                # SAS5 keeps pause-menu, settings and save/load UI strings in
+                # the executable as Win32 UTF-16 / cp932 resources and literals,
+                # so coverage never reads 100% on the scenario alone.
+                how = "dump"
         if how == "dump":
             needs_dump.append(name)
         elif how == "index":

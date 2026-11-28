@@ -20,7 +20,7 @@ def tool(name):
     return module
 
 
-text, iar = tool("sas5_text"), tool("sas5_iar")
+text, iar, exe = tool("sas5_text"), tool("sas5_iar"), tool("sas5_exe")
 LINE = "あ".encode("cp932")
 
 
@@ -173,6 +173,207 @@ class Sas5IarTests(unittest.TestCase):
         self.assertEqual(iar.decompress(stream, 7), b"ababa" + b"aa")
         with self.assertRaises(iar.IarError):
             iar.decompress(stream, 50)
+
+
+def _pe_with_ui():
+    """Minimal valid 32-bit PE with .rdata (UTF-16LE, cp932, and ASCII/pointer
+    noise that must be ignored) and .rsrc (GMO gettext catalog, RT_STRING,
+    RT_MENU, RT_DIALOG)."""
+    file_align, sec_align = 0x200, 0x1000
+    # Build .rdata payload: one UTF-16LE Japanese UI string, one cp932 one,
+    # plus ASCII string and 32-bit pointer noise that must not be extracted.
+    utf16_str = "セーブ確認".encode("utf-16-le") + b"\x00\x00"
+    cp932_str = "設定を保存します。".encode("cp932") + b"\x00"
+    ascii_noise = b"MainWindowPosX\x00\x00"
+    ptr_noise = struct.pack("<3H", 0x5078, 0x006E, 0x0020) + b"\x00\x00"
+    rdata_body = (
+        b"\x00\x00\x00\x00"
+        + utf16_str
+        + b"\x00\x00"
+        + cp932_str
+        + b"\x00\x00"
+        + ascii_noise
+        + ptr_noise
+    )
+    rdata_raw = rdata_body.ljust(file_align, b"\x00")
+
+    # Build SAS5 GMO (GNU gettext .mo) catalog + RT_STRING + RT_MENU + RT_DIALOG.
+    gmo_parsed = {
+        "rev": 0,
+        "hash_size": 7,
+        "encoding": "cp932",
+        "origs": [b"", b"Config", b"Save"],
+        "trans": [
+            b"Content-Type: text/plain; charset=Shift_JIS\n",
+            "ユーザー設定".encode("cp932"),
+            "セーブ".encode("cp932"),
+        ],
+    }
+    rsrc_gmo = exe._build_mo(gmo_parsed, {})
+    slots = [""] * 16
+    slots[1] = "保存しますか？"
+    rsrc_string = exe._build_string_block(slots)
+    rsrc_menu = (
+        struct.pack("<HH", 0, 0)
+        + struct.pack("<HH", 0x0000, 100)
+        + "セーブ".encode("utf-16-le")
+        + b"\x00\x00"
+        + struct.pack("<HH", 0x0080, 101)
+        + "終了".encode("utf-16-le")
+        + b"\x00\x00"
+    )
+    rsrc_dialog = (
+        struct.pack("<IIHHHHH", 0, 0, 1, 0, 0, 100, 50)
+        + b"\x00\x00"  # menu
+        + b"\x00\x00"  # class
+        + "環境設定".encode("utf-16-le")
+        + b"\x00\x00"
+    )
+    while len(rsrc_dialog) % 4:
+        rsrc_dialog += b"\x00"
+    rsrc_dialog += (
+        struct.pack("<IIHHHHH", 0, 0, 10, 10, 40, 12, 1)
+        + struct.pack("<HH", 0xFFFF, 0x0080)  # Button class
+        + "決定".encode("utf-16-le")
+        + b"\x00\x00"
+        + struct.pack("<H", 0)
+    )
+    tree = {
+        (True, "GMO"): {(True, "ID_GMO_SAS5"): {(False, 0x0411): (rsrc_gmo, 0, 0)}},
+        (False, exe.RT_MENU): {(False, 10): {(False, 0x0411): (rsrc_menu, 0, 0)}},
+        (False, exe.RT_DIALOG): {(False, 20): {(False, 0x0411): (rsrc_dialog, 0, 0)}},
+        (False, exe.RT_STRING): {(False, 1): {(False, 0x0411): (rsrc_string, 0, 0)}},
+    }
+    # Build minimal PE header first so PeFile._serialize_resources can run.
+    pe_off = 0x80
+    opt_size = 0xE0
+    rsrc_vaddr = 0x2000
+    dummy = object.__new__(exe.PeFile)
+    rsrc_blob = dummy._serialize_resources(tree, rsrc_vaddr)
+    rsrc_raw = rsrc_blob.ljust(file_align, b"\x00")
+
+    dos = bytearray(pe_off)
+    dos[0:2] = b"MZ"
+    struct.pack_into("<I", dos, 0x3C, pe_off)
+    coff = struct.pack("<HHIIIHH", 0x014C, 2, 0, 0, 0, opt_size, 0x0102)
+    opt = bytearray(opt_size)
+    struct.pack_into("<H", opt, 0, 0x10B)  # PE32
+    struct.pack_into("<II", opt, 32, sec_align, file_align)
+    struct.pack_into("<II", opt, 56, 0x3000, file_align)
+    struct.pack_into("<I", opt, 92, 16)
+    struct.pack_into("<II", opt, 96 + 16, rsrc_vaddr, len(rsrc_blob))
+    sec1 = struct.pack(
+        "<8sIIIIIIHHI",
+        b".rdata\x00\x00",
+        len(rdata_body),
+        0x1000,
+        len(rdata_raw),
+        file_align,
+        0,
+        0,
+        0,
+        0,
+        0x40000040,
+    )
+    sec2 = struct.pack(
+        "<8sIIIIIIHHI",
+        b".rsrc\x00\x00\x00",
+        len(rsrc_blob),
+        rsrc_vaddr,
+        len(rsrc_raw),
+        file_align + len(rdata_raw),
+        0,
+        0,
+        0,
+        0,
+        0x40000040,
+    )
+    headers = (bytes(dos) + b"PE\0\0" + coff + bytes(opt) + sec1 + sec2).ljust(
+        file_align, b"\x00"
+    )
+    return headers + rdata_raw + rsrc_raw
+
+
+class Sas5ExeTests(unittest.TestCase):
+    def test_extracts_and_rebuilds_resources_and_static_ui_strings(self):
+        raw = _pe_with_ui()
+        pe = exe.PeFile(raw)
+        self.assertEqual(pe.check(), [])
+        units = {unit["id"]: unit for unit in pe.units()}
+        self.assertEqual(units["RSRC/GMO/ID_GMO_SAS5/1"]["msgid"], "Config")
+        self.assertEqual(units["RSRC/GMO/ID_GMO_SAS5/1"]["text"], "ユーザー設定")
+        self.assertEqual(units["RSRC/GMO/ID_GMO_SAS5/2"]["text"], "セーブ")
+        self.assertEqual(units["RSRC/STRING/1"]["text"], "保存しますか？")
+        self.assertEqual(units["RSRC/MENU/10/0"]["text"], "セーブ")
+        self.assertEqual(units["RSRC/MENU/10/1"]["text"], "終了")
+        self.assertEqual(units["RSRC/DIALOG/20/title"]["text"], "環境設定")
+        self.assertEqual(units["RSRC/DIALOG/20/0"]["text"], "決定")
+        # ASCII and pointer-table noise in .rdata are not extracted.
+        utf16_ids = [uid for uid in units if uid.startswith("UTF16/")]
+        cp932_ids = [uid for uid in units if uid.startswith("CP932/")]
+        self.assertEqual(len(utf16_ids), 1)
+        self.assertEqual(len(cp932_ids), 1)
+        utf16_id, cp932_id = utf16_ids[0], cp932_ids[0]
+        self.assertEqual(units[utf16_id]["text"], "セーブ確認")
+        self.assertEqual(units[utf16_id]["max_characters"], 5)
+        self.assertEqual(units[cp932_id]["text"], "設定を保存します。")
+        self.assertEqual(units[cp932_id]["max_bytes"], 18)
+
+        # Long English translations force .rsrc expansion into a new .rsrc2 section.
+        long_prompt = "Do you really want to overwrite this save slot? " * 8
+        rebuilt = pe.rebuild(
+            {
+                "RSRC/GMO/ID_GMO_SAS5/1": "User Settings",
+                "RSRC/GMO/ID_GMO_SAS5/2": "Save Game",
+                "RSRC/STRING/1": long_prompt,
+                "RSRC/MENU/10/0": "Save Game",
+                "RSRC/MENU/10/1": "Quit",
+                "RSRC/DIALOG/20/title": "System Settings",
+                "RSRC/DIALOG/20/0": "Apply",
+                utf16_id: "Save?",
+                cp932_id: "Save settings.",
+            }
+        )
+        after = exe.PeFile(rebuilt)
+        self.assertEqual(after.check(), [])
+        self.assertEqual(after.num_sections, 3)
+        self.assertEqual(after.sections[-1]["name"], b".rsrc2")
+        # Verify rebuilt GMO catalog keeps msgids and stores English translations.
+        gblob, _cp, _res = after.resources[(True, "GMO")][(True, "ID_GMO_SAS5")][
+            (False, 0x0411)
+        ]
+        parsed_mo = exe._parse_mo(gblob)
+        self.assertEqual(parsed_mo["origs"][1:], [b"Config", b"Save"])
+        self.assertEqual(parsed_mo["trans"][1:], [b"User Settings", b"Save Game"])
+        # Verify rebuilt Win32 resources decode back with the English labels.
+        blob, _cp, _res = after.resources[(False, exe.RT_STRING)][(False, 1)][
+            (False, 0x0411)
+        ]
+        self.assertEqual(exe._parse_string_block(blob, 1)[1], long_prompt)
+        mblob, _cp, _res = after.resources[(False, exe.RT_MENU)][(False, 10)][
+            (False, 0x0411)
+        ]
+        self.assertEqual(
+            [item[2] for item in exe._parse_menu(mblob)[2]], ["Save Game", "Quit"]
+        )
+        dblob, _cp, _res = after.resources[(False, exe.RT_DIALOG)][(False, 20)][
+            (False, 0x0411)
+        ]
+        parsed_dlg = exe._parse_dialog(dblob)
+        self.assertEqual(parsed_dlg[4], "System Settings")
+        self.assertEqual(parsed_dlg[6][0][2], ("str", "Apply"))
+        # In-place static strings were patched at their offsets.
+        off16 = int(utf16_id.split("/")[1], 16)
+        self.assertEqual(rebuilt[off16 : off16 + 10], "Save?".encode("utf-16-le"))
+        off932 = int(cp932_id.split("/")[1], 16)
+        self.assertEqual(
+            rebuilt[off932 : off932 + 18], b"Save settings.\x00\x00\x00\x00"
+        )
+        # Overlong static strings and already-patched inputs are refused.
+        with self.assertRaisesRegex(exe.ExeError, "fit in place"):
+            pe.rebuild({utf16_id: "Save Confirmation"})
+        with self.assertRaisesRegex(exe.ExeError, "Build from the original"):
+            after.rebuild({utf16_id: "Save?"})
 
 
 if __name__ == "__main__":

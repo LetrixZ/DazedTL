@@ -30,6 +30,7 @@ BUNDLED = [
     "Game Archives/RPG Maker MZ/decrypt_rpgmz_data.js",
     "C++/Godot",
     "C++/Trois/dxa_unpack.py",
+    "C++/SAS5/sas5_exe.py",
     "C++/SAS5/sas5_iar.py",
     "C++/SAS5/sas5_text.py",
     "C++/Yuris/patch_locale.py",
