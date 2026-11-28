@@ -124,25 +124,35 @@ TOOL_DIRS = {"bepinex", "melonloader", "monobleedingedge"}
 def compiled_only(names):
     """The files of *names* whose text only a decoded dump holds, though no
     extension says so: a Ren'Py game's compiled scripts without the script
-    beside them, its archives when it ships no script at all, and a Unity
-    game's script assembly and scenes, which hold strings players read.
-    Ren'Py's own scripts, in its renpy folder, are the engine's."""
+    beside them, its archives when it ships no script at all, a Unity
+    game's script assembly and scenes, and an SAS5 game's executable (whose
+    GMO gettext catalog and Win32 resources hold its UI). Ren'Py's own
+    scripts, in its renpy folder, are the engine's."""
     names = [
         name
         for name in names
         if "renpy" not in PurePosixPath(name.casefold()).parts[:-1]
     ]
     scripts = {name.casefold() for name in names if name.casefold().endswith(".rpy")}
+    sas5 = any(PurePosixPath(name).suffix.casefold() == ".sec5" for name in names)
     found = []
     for name in names:
         lowered = name.casefold()
         path = PurePosixPath(lowered)
+        folders = path.parts[:-1]
         data = len(path.parts) > 1 and path.parts[-2].endswith("_data")
         if (
             (lowered.endswith(".rpyc") and lowered[:-1] not in scripts)
             or (lowered.endswith(".rpa") and not scripts)
             or lowered.endswith("_data/managed/assembly-csharp.dll")
             or (data and re.fullmatch(r"level\d+", path.name))
+            or (
+                sas5
+                and lowered.endswith(".exe")
+                and not any(
+                    part in SKIPPED_DIRS or part in TOOL_DIRS for part in folders
+                )
+            )
         ):
             found.append(name)
     return set(found)
