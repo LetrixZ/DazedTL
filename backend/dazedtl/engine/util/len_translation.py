@@ -28,24 +28,31 @@ BUNDLED_SKILL = SKILLS_DIR / "game-translation"
 WORKSPACE_RELATIVE = Path(".dazedtl") / "len-method"
 _WORK_IGNORE_BEGIN = LEN_WORK_GITIGNORE_BEGIN
 _WORK_IGNORE_END = LEN_WORK_GITIGNORE_END
+# What an assistant's tools leave that stays on this computer: keys, tool
+# environments, saves, logs and caches. The game's Len block and the
+# .dazedtl work history (compatibility/work_history) both leave them out.
+LOCAL_ONLY = (
+    ".env",
+    ".env.*",
+    ".api_key",
+    "api_keys.json",
+    "*_key.txt",
+    "*_keys.txt",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    "node_modules/",
+    "saves/",
+    "save/",
+    "logs/",
+    "cache/",
+)
+_LOCAL_ONLY_LINES = "\n".join(LOCAL_ONLY)
 _WORK_IGNORE_BLOCK = f"""{_WORK_IGNORE_BEGIN}
 # Len work, guidance, translation stores and QA artifacts stay local.
 # Runtime patch files are selected separately with git-scope.
 /.dazedtl/**
-.env
-.env.*
-.api_key
-api_keys.json
-*_key.txt
-*_keys.txt
-.venv/
-venv/
-__pycache__/
-node_modules/
-saves/
-save/
-logs/
-cache/
+{_LOCAL_ONLY_LINES}
 {_WORK_IGNORE_END}
 """
 MODES = {

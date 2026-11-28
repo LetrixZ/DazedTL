@@ -37,11 +37,19 @@ class WorkHistoryTests(unittest.TestCase):
                 ".dazedtl/plugin-work/state.json.tmp": b"half written",
                 ".dazedtl/images/img/pictures/edited.png": b"edited",
                 ".dazedtl/images/img/pictures/untouched.png": b"copy",
+                # Keys, tool environments, originals and reference games stay out.
+                ".dazedtl/len-method/work/.env": b"KEY=secret",
+                ".dazedtl/len-method/work/node_modules/x/index.js": b"",
+                ".dazedtl/len-method/work/notes/.gitignore": b"draft.md\n",
+                ".dazedtl/len-method/work/notes/draft.md": b"draft",
+                ".dazedtl/len-method/work/notes/plan.md": b"plan",
+                ".dazedtl/image_manager/guided/originals/img/pictures/edited.png": b"original",
+                ".dazedtl/reference-games.json": b'{"games": ["/home/me/other"]}',
             }.items():
                 (game / name).parent.mkdir(parents=True, exist_ok=True)
                 (game / name).write_bytes(raw)
             inventory = work / "image_manager/guided/inventory.sqlite3"
-            inventory.parent.mkdir(parents=True)
+            inventory.parent.mkdir(parents=True, exist_ok=True)
             with sqlite3.connect(inventory) as db:
                 db.execute("CREATE TABLE assets (id TEXT, data TEXT)")
                 for name, changed in (("edited", True), ("untouched", False)):
@@ -83,7 +91,13 @@ class WorkHistoryTests(unittest.TestCase):
             lfs = work_history.lfs_installed(game)
             self.assertEqual(
                 held,
-                {".gitattributes", "glossary.txt", "plugin-work/state.json"}
+                {
+                    ".gitattributes",
+                    "glossary.txt",
+                    "plugin-work/state.json",
+                    "len-method/work/notes/.gitignore",
+                    "len-method/work/notes/plan.md",
+                }
                 | ({"images/img/pictures/edited.png"} if lfs else set()),
             )
             message = git(work, "log", "-1", "--format=%B", commit, **environment)
@@ -93,6 +107,27 @@ class WorkHistoryTests(unittest.TestCase):
                 self.assertIn("edited.png", git(work, "lfs", "ls-files", **environment))
             self.assertFalse(work_history.marked(game))
             self.assertIsNone(work_history.commit(game, "close"))
+
+    def test_a_switch_asks_once_and_closing_stays_within_its_budget(self):
+        asked = []
+        committer = work_history.Committer(
+            list, lambda error: None, commit=lambda root, why: asked.append(why)
+        )
+        # Every snapshot reports the open game; only leaving it asks.
+        for root in ("a", "a", "b", "b", "b"):
+            committer.open(root)
+        committer._sweep()
+        self.assertEqual(asked, ["switch"])
+
+        def slow(root, why):
+            asked.append(why)
+            __import__("time").sleep(0.3)
+
+        committer.commit = slow
+        started = __import__("time").monotonic()
+        committer.close(budget=0.2)
+        self.assertLess(__import__("time").monotonic() - started, 0.5)
+        self.assertEqual(asked, ["switch", "close"])
 
 
 if __name__ == "__main__":

@@ -2655,11 +2655,6 @@ const imagesRevised = () => {
   ];
 };
 
-/**
- * @type {Record<string, { description: string, game?: string,
- *   from?: "previous", upgrade?: boolean,
- *   steps: () => [string, (context: any) => Promise<unknown>][] }>}
- */
 /** The picture in the loose images folder, translated and applied. */
 const looseApplied = [
   "Translate the lettered picture in the suggested images folder and apply it",
@@ -2728,8 +2723,14 @@ const workHistory = [
         `The work history holds what it leaves out: ${out.join(", ")}.`,
       );
     // The applied picture's edited copy, as a Git LFS file, and no other image.
-    const images = held.filter((name) => name.startsWith("images/"));
-    if (images.length !== 1 || !images[0].endsWith(lettered[0]))
+    const images = held.filter((name) =>
+      /\.(png_?|rpgmvp|bmp|jpe?g|tlg|webp|gif)$/i.test(name),
+    );
+    if (
+      images.length !== 1 ||
+      !images[0].startsWith("images/") ||
+      !images[0].endsWith(lettered[0])
+    )
       throw new Error(
         `The work history holds these images: ${images.join(", ")}.`,
       );
@@ -2741,6 +2742,11 @@ const workHistory = [
   },
 ];
 
+/**
+ * @type {Record<string, { description: string, game?: string,
+ *   from?: "previous", upgrade?: boolean,
+ *   steps: () => [string, (context: any) => Promise<unknown>][] }>}
+ */
 export const scenarios = {
   fresh: {
     description: "An untouched game and an empty profile.",

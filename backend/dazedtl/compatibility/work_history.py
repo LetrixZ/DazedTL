@@ -11,10 +11,15 @@ them in yet. Its `core.worktree` is relative, so a moved game keeps it, and
 DazedTL names both folders on every Git call.
 
 It holds what `wanted` lists, an allowlist, so nothing new joins it by
-accident: DazedTL's records and guidance, and of the Images work only the
-editable copies the inventory marks changed and the layers drawn on them,
-never an unedited copy or an original. The inventory itself, an SQLite file,
-stays out, as do what Git already keeps elsewhere or can't use: the VX Ace
+accident: DazedTL's records and guidance, and of the images only the
+editable copies the Images inventory marks changed, never an unedited copy,
+an original or an image anywhere else in the folder. What Git ignores stays
+out too: the `.gitignore` files an assistant's tools leave, and the keys,
+tool environments, saves, logs and caches Len's work block names
+(len_translation `LOCAL_ONLY`), which the repository's own exclude file
+holds. So do the Images inventory, an SQLite file a diff can't read, the
+reference games, which name folders on this computer and copy other games'
+data, and what Git already keeps elsewhere or can't use: the VX Ace
 originals, backups, archived work, staging folders and tool feedback. Edited
 images are Git LFS files from the first commit (`ATTRIBUTES`); without
 git-lfs they are left out, and kept as committed, and a plain file over
@@ -22,8 +27,9 @@ git-lfs they are left out, and kept as committed, and a plain file over
 
 Every checkpoint marks its game (`touch`), which starts no process, so an
 operation's worker marks too; the backend's `Committer` commits a marked
-game's work in the background, and the work of each game open in this
-session when another is opened and when DazedTL closes. A commit follows a
+game's work in the background, the work of the game the user leaves for
+another, and at close the open game's and the marked ones' within a few
+seconds, since Electron ends the backend soon after. A commit follows a
 checkpoint, which its `DazedTL-Checkpoint` trailer names, unless it was a
 close's or a switch's. Commits to one game take turns through a lock in its
 Git folder, and a mark made while one commits stays for the next.
@@ -52,19 +58,10 @@ PLAIN_LIMIT = 50 * 1024 * 1024
 # The files and folders of `.dazedtl` the history holds; `images` holds only
 # edited copies (`_images`).
 FILES = frozenset(
-    {
-        ".gitattributes",
-        "glossary.txt",
-        "settings.json",
-        "forge-config.json",
-        "reference-games.json",
-        "reference-index.json",
-        "reference-overlaps.json",
-    }
+    {".gitattributes", "glossary.txt", "settings.json", "forge-config.json"}
 )
 FOLDERS = (
     "skills",
-    "reference-data",
     "len-method",
     "guided",
     "manual",
@@ -75,27 +72,18 @@ FOLDERS = (
     "playtest",
     "image_manager",
 )
-# Within FOLDERS: the Images inventory, an SQLite file a diff can't read,
-# and its staging.
-LEFT_OUT = frozenset(
-    {
-        "image_manager/guided/inventory.sqlite3",
-        "image_manager/guided/stage",
-        "image_manager/guided/.lock",
-    }
-)
-# Files written beside a record while it is replaced, and caches.
+# Files written beside a record while it is replaced.
 _PASSING = (".tmp", ".lock", ".part", ".dazedtl-part", "-journal", "-wal", "-shm")
-# The layers an image editor draws on an edited copy, with its job.
-_LAYERS = ("images/.dazedtl/paint", "images/.dazedtl/cut")
-_JOB = "images/.dazedtl/image_job.json"
-# The mark a checkpoint leaves in the game's Git folder, and its lock.
-MARK = "dazedtl/work-pending.json"
+# Images, which the history holds only as edited copies under images/.
+_IMAGES = (".png", ".png_", ".rpgmvp", ".bmp", ".jpg", ".jpeg", ".tlg", ".webp", ".gif")
 # What asked for a commit no checkpoint marked, as its subject says.
 REASONS = {
     "switch": "Work saved when another game opened",
     "close": "Work saved when DazedTL closed",
 }
+# How long closing may commit, well inside the time Electron gives the
+# backend to end (app/electron/backend.cjs).
+CLOSE_BUDGET = 5
 _lfs: list[bool] = []
 
 
@@ -104,9 +92,19 @@ def _work(root):
 
 
 def _mark(root):
-    """The mark's path in the game's own Git folder, or None without one."""
-    git = Path(root) / ".git"
-    return git / MARK if git.is_dir() and not git.is_symlink() else None
+    """The mark's path in the game's own Git folder, beside its project
+    marker, or None without one."""
+    from dazedtl.projects import location
+
+    marker = location._marker(root)
+    return None if marker is None else marker.with_name("work-pending.json")
+
+
+def _image_work():
+    """The Images work folder, relative to `.dazedtl`."""
+    from dazedtl.images.service import WORK as IMAGES
+
+    return IMAGES.removeprefix(WORK + "/")
 
 
 def touch(root, checkpoint, subject):
@@ -129,19 +127,9 @@ def marked(root):
     return bool(mark and mark.is_file())
 
 
-def _skipped(relative):
-    parts = relative.split("/")
-    return (
-        relative in LEFT_OUT
-        or "__pycache__" in parts
-        or relative.endswith(_PASSING)
-        or any(part.startswith(".~") for part in parts)
-    )
-
-
-def _walk(work, folder):
-    """The regular files under `folder` of `work`, as work-relative paths;
-    a link is never followed."""
+def _walk(work, folder, left_out):
+    """The regular files under `folder` of `work`, as work-relative paths,
+    but images and `left_out`; a link is never followed."""
     top = work / folder
     if top.is_symlink() or not top.is_dir():
         return
@@ -151,40 +139,48 @@ def _walk(work, folder):
         names[:] = [
             name
             for name in names
-            if not (here / name).is_symlink() and not _skipped(f"{base}/{name}")
+            if not (here / name).is_symlink() and f"{base}/{name}" not in left_out
         ]
         for name in entries:
             relative = f"{base}/{name}"
-            if not _skipped(relative) and not (here / name).is_symlink():
+            if (
+                relative not in left_out
+                and not name.casefold().endswith(_PASSING + _IMAGES)
+                and not (here / name).is_symlink()
+            ):
                 yield relative
 
 
 def _images(root):
-    """The work-relative images the history holds: the edited copies and
-    the layers drawn on them."""
+    """The work-relative edited copies the Images inventory names."""
     from dazedtl.images.inventory import edited_copies
 
     work = _work(root)
-    inventory = work / "image_manager/guided/inventory.sqlite3"
     found = set()
-    for path in edited_copies(inventory):
+    for path in edited_copies(work / _image_work() / "inventory.sqlite3"):
         relative = path.removeprefix(WORK + "/")
         if relative.startswith("images/") and (work / relative).is_file():
             found.add(relative)
-    for folder in _LAYERS:
-        found.update(_walk(work, folder))
-    if (work / _JOB).is_file():
-        found.add(_JOB)
     return found
 
 
+def _size(path):
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
 def wanted(root, lfs=True):
-    """The work-relative files the history holds now, and what it leaves
-    out of them, by reason; without `lfs` no image is wanted."""
+    """The work-relative files the history holds now, before Git's ignore
+    rules, and what it leaves out of them, by reason; without `lfs` no image
+    is wanted."""
     work = _work(root)
+    images = _image_work()
+    left_out = {f"{images}/inventory.sqlite3", f"{images}/stage", f"{images}/.lock"}
     files = {name for name in FILES if (work / name).is_file()}
     for folder in FOLDERS:
-        files.update(_walk(work, folder))
+        files.update(_walk(work, folder, left_out))
     left = {}
     if lfs:
         files |= _images(root)
@@ -193,14 +189,16 @@ def wanted(root, lfs=True):
     large = {
         name
         for name in files
-        if not name.startswith("images/") and (work / name).stat().st_size > PLAIN_LIMIT
+        if not name.startswith("images/") and _size(work / name) > PLAIN_LIMIT
     }
     if large:
         left[f"{len(large)} files over 50 MB"] = "Git sites refuse big files"
     return files - large, left
 
 
-def _git(root, *args, input_text=None, check=True):
+def _git(root, *args, input_text=None, check=True, literal=True):
+    """Git in the work history; `literal` reads paths as names, as every
+    command but check-ignore takes them."""
     from util.version_update.git_workflow import _run_git
 
     work = _work(root).resolve()
@@ -212,11 +210,15 @@ def _git(root, *args, input_text=None, check=True):
         env={
             "GIT_DIR": str(work / GIT_DIR),
             "GIT_WORK_TREE": str(work),
-            "GIT_LITERAL_PATHSPECS": "1",
+            "GIT_LITERAL_PATHSPECS": "1" if literal else "0",
         },
         errors="surrogateescape",
         timeout=600,
     )
+
+
+def _listed(names):
+    return "".join(name + "\0" for name in sorted(names))
 
 
 def lfs_installed(root):
@@ -229,20 +231,27 @@ def lfs_installed(root):
     return _lfs[0]
 
 
+def _exclude():
+    from util.len_translation import LOCAL_ONLY
+
+    return "".join(line + "\n" for line in (f"/{GIT_DIR}/", *LOCAL_ONLY)).encode()
+
+
 def _ensure(root, lfs):
-    """Makes the repository once, and sets Git LFS up in it once git-lfs
-    runs."""
+    """Makes the repository once, keeps its exclude file and attributes
+    current, and sets Git LFS up in it once git-lfs runs."""
     work = _work(root)
     git = work / GIT_DIR
     if not (git / "HEAD").is_file():
         _git(root, "init", "-q", "-b", BRANCH)
         _git(root, "config", "core.worktree", "..")
-        exclude = git / "info/exclude"
-        exclude.parent.mkdir(parents=True, exist_ok=True)
-        system.write_bytes(exclude, f"/{GIT_DIR}/\n".encode())
-    attributes = work / ".gitattributes"
-    if not attributes.is_file() or system.read_bytes(attributes) != ATTRIBUTES.encode():
-        system.write_bytes(attributes, ATTRIBUTES.encode(), mode=0o644)
+    for path, content, mode in (
+        (git / "info/exclude", _exclude(), 0o600),
+        (work / ".gitattributes", ATTRIBUTES.encode(), 0o644),
+    ):
+        if not path.is_file() or system.read_bytes(path) != content:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            system.write_bytes(path, content, mode=mode)
     if lfs and b'[filter "lfs"]' not in system.read_bytes(git / "config"):
         _git(root, "lfs", "install", "--local")
 
@@ -258,11 +267,52 @@ def _unlock(git):
         pass
 
 
+def _ignored(root, names):
+    """Those of `names` Git's ignore rules leave out, tracked or not."""
+    if not names:
+        return set()
+    found = _git(
+        root,
+        "check-ignore",
+        "--no-index",
+        "--stdin",
+        "-z",
+        input_text=_listed(names),
+        check=False,
+        literal=False,
+    )
+    if found.returncode not in (0, 1):
+        raise ValueError(found.stderr.strip()[:300] or "git check-ignore failed")
+    return set(filter(None, found.stdout.split("\0")))
+
+
+def _add(root, names):
+    """Stages `names`, leaving out one removed since it was listed, as an
+    assistant's tools remove files while a commit runs."""
+    for attempt in (1, 2):
+        present = {name for name in names if (_work(root) / name).is_file()}
+        if not present:
+            return
+        added = _git(
+            root,
+            "add",
+            "--pathspec-from-file=-",
+            "--pathspec-file-nul",
+            input_text=_listed(present),
+            check=False,
+        )
+        if added.returncode == 0:
+            return
+        if attempt == 2 or "did not match" not in added.stderr:
+            raise ValueError(added.stderr.strip()[:300] or "git add failed")
+
+
 def commit(root, reason=None):
     """Commits the game's work as it is now, after the checkpoint its mark
     names, or for the `reason` in REASONS that asked; returns the commit,
     or None when nothing changed or the game has no work or Git."""
     from util.paths import game_git_set_up
+    from util.version_update.git_workflow import _TOOL_EMAIL, _TOOL_NAME
 
     from dazedtl.compatibility.checkpoint_commits import SUBJECT_LIMIT
 
@@ -281,6 +331,7 @@ def commit(root, reason=None):
         _ensure(root, lfs)
         _unlock(git)
         want, left = wanted(root, lfs)
+        want -= _ignored(root, want)
         tracked = set(filter(None, _git(root, "ls-files", "-z").stdout.split("\0")))
         # Without git-lfs the images committed before stay as they are.
         drop = {
@@ -295,17 +346,9 @@ def commit(root, reason=None):
                 "--ignore-unmatch",
                 "--pathspec-from-file=-",
                 "--pathspec-file-nul",
-                input_text="".join(name + "\0" for name in sorted(drop)),
+                input_text=_listed(drop),
             )
-        if want:
-            _git(
-                root,
-                "add",
-                "-f",
-                "--pathspec-from-file=-",
-                "--pathspec-file-nul",
-                input_text="".join(name + "\0" for name in sorted(want)),
-            )
+        _add(root, want)
         subject = point.get("subject") or REASONS.get(reason or "", "Work saved")
         trailers = [
             *(
@@ -321,8 +364,6 @@ def commit(root, reason=None):
         text = subject[:SUBJECT_LIMIT] + (
             "\n\n" + "\n".join(trailers) if trailers else ""
         )
-        from util.version_update.git_workflow import _TOOL_EMAIL, _TOOL_NAME
-
         made = _git(
             root,
             "-c",
@@ -356,20 +397,23 @@ def commit(root, reason=None):
 
 class Committer:
     """Commits marked games' work in the background, in the backend: each
-    `interval`, when a checkpoint in this process marks one, and for the
-    games `request` names; `close` commits what is left, waiting `timeout`."""
+    `interval`, when a checkpoint in this process marks one, and the game
+    the user leaves for another (`open`); `close` commits what is left
+    within CLOSE_BUDGET."""
 
     def __init__(
         self,
         roots: Callable[[], Iterable[str]],
         failure: Callable[[BaseException], None],
         interval=15,
+        commit=commit,
     ):
         self.roots = roots
         self.failure = failure
         self.interval = interval
+        self.commit = commit
         self.requested: dict[str, str] = {}
-        self.opened: set[str] = set()
+        self.current: str | None = None
         self.event = threading.Event()
         self.stopping = False
         self.failed: dict[str, str] = {}
@@ -387,15 +431,15 @@ class Committer:
         self.event.set()
 
     def open(self, root):
-        """Notes the game open now, and asks for the work of the one opened
-        before it, which a switch leaves."""
+        """Notes the game open now, which every snapshot reports; once it is
+        another game than before, asks for the work of the one it left."""
         root = str(Path(root).resolve())
         with self.lock:
-            for other in self.opened - {root}:
-                self.requested[other] = "switch"
-            self.opened.add(root)
-        if len(self.opened) > 1:
-            self.wake()
+            left, self.current = self.current, root
+            if left is None or left == root:
+                return
+            self.requested[left] = "switch"
+        self.wake()
 
     def _run(self):
         while not self.stopping:
@@ -404,20 +448,22 @@ class Committer:
             if not self.stopping:
                 self._sweep()
 
-    def _sweep(self, closing=False):
+    def _sweep(self, closing=False, deadline=None):
         with self.lock:
             asked = dict(self.requested)
             self.requested.clear()
-            if closing:
-                asked.update(dict.fromkeys(self.opened, "close"))
+            if closing and self.current:
+                asked.setdefault(self.current, "close")
         try:
             marked_roots = [r for r in self.roots() if marked(r)]
         except Exception as error:  # noqa: BLE001 - the next sweep tries again
             self.failure(error)
             marked_roots = []
-        for root in dict.fromkeys([*marked_roots, *asked]):
+        for root in dict.fromkeys([*asked, *marked_roots]):
+            if deadline is not None and time.monotonic() > deadline:
+                return
             try:
-                commit(root, asked.get(root))
+                self.commit(root, asked.get(root))
                 self.failed.pop(root, None)
             except Exception as error:  # noqa: BLE001 - the mark stays for the next sweep
                 # One report per game until it commits again.
@@ -425,16 +471,23 @@ class Committer:
                     self.failed[root] = str(error)
                     self.failure(error)
 
-    def close(self, timeout=20):
+    def close(self, budget=CLOSE_BUDGET):
+        """Commits the open game's work and the marked games' until
+        `budget` seconds have passed; what is left waits for the next
+        session, its marks kept."""
         global _committer
+        deadline = time.monotonic() + budget
         self.stopping = True
         self.event.set()
         if self.thread.is_alive():
-            self.thread.join(timeout)
+            self.thread.join(budget)
         _committer = None
-        done = threading.Thread(target=self._sweep, args=(True,), daemon=True)
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return
+        done = threading.Thread(target=self._sweep, args=(True, deadline), daemon=True)
         done.start()
-        done.join(timeout)
+        done.join(left)
 
 
 _committer: Committer | None = None

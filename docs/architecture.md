@@ -425,8 +425,8 @@ The game folder's Git repository is the one record of a translation: every chang
 The game's `.dazedtl` folder, which its repository ignores but for the portable files, has a Git history of its own, to back up the work Plugin files, Images, Guided, Manual and Assistant-led keep there ([work_history](../backend/dazedtl/compatibility/work_history.py), whose docstring holds the rules).
 
 - Its Git folder is `.dazedtl/work.git`, never a nested `.git`, which would stop the game's repository adding the portable files.
-- It holds an allowlist; of the Images work, only the copies the inventory marks changed, as Git LFS files, and never an original.
-- Each checkpoint marks the game, starting no process, and the backend commits marked games in the background, and each game open in the session when another opens and at close; a commit names the checkpoint it follows.
+- It holds an allowlist, less what Git ignores, with the keys, tool environments and caches Len's work block names ([LOCAL_ONLY](../backend/dazedtl/engine/util/len_translation.py)); of images, only the copies the inventory marks changed, as Git LFS files, and never an original or the reference games, which name folders on this computer.
+- Each checkpoint marks the game, starting no process, and the backend commits marked games in the background, the game the user leaves when another opens, and at close what it can in a few seconds; a commit names the checkpoint it follows.
 
 ## Original game files
 
