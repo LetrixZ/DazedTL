@@ -2289,7 +2289,6 @@ class TranslationTests(unittest.TestCase):
             "mode": "batch",
             "instructions": "Keep this",
             "include_images": False,
-            "images_extract_only": False,
             "include_glossary_base": True,
             "install_forge": False,
         }
