@@ -4141,11 +4141,13 @@ try:
                                                         if required == ["Line1"]
                                                         else ""
                                                         for required in [
-                                                            row["body"][
-                                                                "response_format"
-                                                            ]["json_schema"]["schema"][
-                                                                "required"
-                                                            ]
+                                                            json.loads(
+                                                                row["body"][
+                                                                    "response_format"
+                                                                ]["json_schema"][
+                                                                    "schema"
+                                                                ]
+                                                            )["required"]
                                                         ]
                                                         for key in required
                                                     }
@@ -4288,11 +4290,15 @@ try:
                 "paid-router-2",
             ]
             assert [len(batch["requests"]) for batch in sent_batches] == [1, 1]
+            # A Google model's Batch sends its schema as a JSON string, which
+            # OpenRouter's Vertex adapter takes (structured_output).
             assert [
                 len(
-                    batch["requests"][0]["body"]["response_format"]["json_schema"][
-                        "schema"
-                    ]["required"]
+                    json.loads(
+                        batch["requests"][0]["body"]["response_format"]["json_schema"][
+                            "schema"
+                        ]
+                    )["required"]
                 )
                 for batch in sent_batches
             ] == [1, 2]
