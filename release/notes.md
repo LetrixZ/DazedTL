@@ -5,7 +5,7 @@
 - **Project:** a game takes a **Rename** on its page, so games opened from a folder called "translation" are told apart; its folder keeps its name.
 - **Translate:** an Assistant-led project can have its assistant only extract images, leaving investigating and translating them to you in the Images tab.
 - **Settings > Remote access:** drive this install from another computer's browser, with a token and its own address and port.
-- **Translate:** Assistant-led knows the SAS5 engine, with tools that rebuild its .sec5 text and .iar images.
+- **Translate:** Assistant-led knows the SAS5 engine, with tools for its .sec5 text, .exe UI resources and .iar images, and keeps ASCII tildes.
 
 ### Changed
 
@@ -18,6 +18,8 @@
 - **Translate:** a Batch run no longer stops with "status failed (HTTP 404)" over a batch OpenRouter had just accepted.
 - **Translate:** a Batch run no longer fails with its sent requests unread when the glossary or guidance is edited while it waits.
 - **Translate:** an Assistant-led run no longer fails a whole request over one line that broke a code, and says how many lines it kept untranslated.
+- **Translate:** accepting a batch now rejects speaker-name echoes and one-line shifts instead of passing them.
+- **Translate:** stale-file refusals name the changed files and point corrections on an older run to the latest organized run.
 - **Text QA:** ordinary Japanese-to-English lines are no longer flagged for an unusual length, nor "Scene 1" as a number mismatch.
 - **Release:** the playtest plays common-event stops, skips battles a game ships no enemy art for, and accepts a censor mask Text QA keeps.
 - **Release:** the playtest's fixes reach the game when nothing new breaks, even beside a problem no fix removes.

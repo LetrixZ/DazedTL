@@ -62,7 +62,8 @@ Never search `CODE` for values that look like addresses, and never parse the tra
 
 Code page 0 in `CHAR` means the system's, so Japanese text turns to mojibake without a Japanese locale.
 On a 107000 game under code page 1252, `patch --codepage 932` only turned that mojibake into `?`, since the display still went through the system's code page; don't count on it.
-ASCII text showed correctly with `CHAR` unchanged, so make all shown text ASCII: `OPTN` titles and setting captions, `―`, full-width marks (including `～`, which DazedTL's export writes for `~`) and U+3000.
+ASCII text showed correctly with `CHAR` unchanged, so make all shown text ASCII: `OPTN` titles and setting captions, `―`, full-width marks and U+3000.
+DazedTL turns off its Latin-target dialogue typography pass (`~` → `～`) for SAS5 runs so exported text and QA stay ASCII.
 The exe's own strings (pause menu, Settings, save/load) showed as `?` in the untouched game too; patching the exe with `sas5_exe.py patch` or a Japanese locale fixes those.
 
 ## Images

@@ -741,8 +741,321 @@ def validate_translation_content(
                 reasons.append(f"Line{i+1}: Structured response marker leaked into translation")
                 continue
 
+    if len(original_items) >= 4:
+        flagged = set(invalid_indices)
+        for i, reason in batch_alignment_problems(
+            original_items,
+            translated_items,
+            target_language,
+            protected=protected,
+        ).items():
+            if i not in flagged:
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: {reason}")
+
     is_valid = len(invalid_indices) == 0
     return is_valid, invalid_indices, reasons
+
+
+_FW_DIGITS = str.maketrans("０１２３４５６７８９", "0123456789")
+_BARE_NAME_WORD = re.compile(r"^[A-Z][A-Za-z0-9'_-]*$")
+_NAME_WRAP = " \t\r\n[]【】「」『』()\"'“”‘’"
+_HONORIFIC_STRIP = re.compile(r"(?:さん|くん|ちゃん|様|殿|先生|先輩)")
+_NON_WORD_STRIP = re.compile(r"[\s「」『』【】\[\]()（）…・、。！？!?,.:：\"'“”‘’~～〜ー―-]+")
+
+
+def _bare_name(text):
+    return str(text).strip(_NAME_WRAP).rstrip(":：").strip()
+
+
+def _is_bare_name_reply(text):
+    """Whether *text* looks like a bare 1-2 word capitalized speaker name
+    with no sentence punctuation or quotes."""
+    raw = str(text).strip()
+    if not raw or "\n" in raw or any(ch in raw for ch in ".!?…！？。\"'“”「」『』"):
+        return False
+    bare = _bare_name(raw)
+    if not bare or len(bare) > 28:
+        return False
+    words = bare.split()
+    return 1 <= len(words) <= 2 and all(_BARE_NAME_WORD.match(word) for word in words)
+
+
+def _known_speaker_names(sources, translations, speakers, glossary_text, protected):
+    """Speaker source names mapped to their known translated names from
+    nameplate lines in the same batch and any glossary rows in *glossary_text*."""
+    batch_speakers = {
+        sp.strip() for sp in speakers if isinstance(sp, str) and sp.strip()
+    }
+    if not batch_speakers:
+        return {}
+    known = {sp: set() for sp in batch_speakers}
+    for sp in batch_speakers:
+        if sp.isascii():
+            name = _bare_name(sp).casefold()
+            if name:
+                known[sp].add(name)
+    for index, (source, trans) in enumerate(zip(sources, translations)):
+        src = str(source).strip()
+        if src in known and str(trans) != str(source):
+            cleaned = content_text(trans, protected[index])
+            if not any(ch in cleaned for ch in "!?…\n"):
+                name = _bare_name(cleaned).casefold()
+                if name and len(name) <= 30:
+                    known[src].add(name)
+    if glossary_text:
+        from util.vocab import split_glossary_row
+
+        for line in str(glossary_text).splitlines():
+            if not any(sp in line for sp in batch_speakers):
+                continue
+            parsed = split_glossary_row(line.strip())
+            if parsed and parsed[0].strip() in known and parsed[1]:
+                name = _bare_name(parsed[1]).casefold()
+                if name:
+                    known[parsed[0].strip()].add(name)
+    return {sp: names for sp, names in known.items() if names}
+
+
+def batch_alignment_problems(
+    sources,
+    translations,
+    target_language=None,
+    *,
+    speakers=None,
+    line_kinds=None,
+    glossary_text="",
+    protected=None,
+):
+    """Batch-level checks that catch speaker-name-only echoes and one-line
+    shifts across ordered *sources* and *translations*, by index.
+
+    Individual line checks (length, tokens, source residue) pass when a model
+    echoes translated speaker names or shifts replies by one line; comparing
+    lines against their speakers and adjacent neighbors catches both without
+    flagging legitimate nameplates or short vocatives."""
+    sources = list(sources)
+    translations = list(translations)
+    count = len(sources)
+    if count == 0 or len(translations) != count:
+        return {}
+    from util.languages import target_uses_cjk
+
+    protected = list(protected) if protected else [()] * count
+    speakers = list(speakers) if speakers is not None else [None] * count
+    line_kinds = list(line_kinds) if line_kinds is not None else ["unknown"] * count
+    problems = {}
+
+    known = _known_speaker_names(sources, translations, speakers, glossary_text, protected)
+    all_known = {name for names in known.values() for name in names}
+    orig_texts = [content_text(sources[i], protected[i]).strip() for i in range(count)]
+    trans_texts = [content_text(translations[i], protected[i]).strip() for i in range(count)]
+
+    if all_known:
+        for i in range(count):
+            if str(translations[i]) == str(sources[i]):
+                continue
+            sp = (speakers[i] or "").strip() if isinstance(speakers[i], str) else ""
+            if line_kinds[i] == "ui" and not sp:
+                continue
+            trans = trans_texts[i]
+            if any(ch in trans for ch in "!?…\n"):
+                continue
+            bare = _bare_name(trans).casefold()
+            bare_dot = _bare_name(trans.rstrip(".")).casefold()
+            matched = bare if bare in all_known else (
+                bare_dot if len(orig_texts[i]) >= 10 and bare_dot in all_known else ""
+            )
+            if not matched:
+                continue
+            remainder = orig_texts[i]
+            for sp_src, names in known.items():
+                if matched in names:
+                    remainder = remainder.replace(sp_src, "")
+            remainder = _NON_WORD_STRIP.sub("", _HONORIFIC_STRIP.sub("", remainder))
+            if len(remainder) >= 8:
+                problems[i] = "it only echoes a speaker name instead of translating the line"
+
+    bare_candidates = [
+        i
+        for i in range(count)
+        if str(translations[i]) != str(sources[i])
+        and (line_kinds[i] == "dialogue" or bool(speakers[i]))
+        and len(orig_texts[i]) >= 8
+        and _is_bare_name_reply(trans_texts[i])
+    ]
+    run_start = 0
+    while run_start < len(bare_candidates):
+        run_end = run_start
+        while (
+            run_end + 1 < len(bare_candidates)
+            and bare_candidates[run_end + 1] == bare_candidates[run_end] + 1
+        ):
+            run_end += 1
+        run = bare_candidates[run_start : run_end + 1]
+        run_start = run_end + 1
+        if len(run) < 3 or len({sources[i] for i in run}) < 2:
+            continue
+        replies = [_bare_name(trans_texts[i]).casefold() for i in run]
+        by_speaker = {}
+        for i, reply in zip(run, replies):
+            sp = (speakers[i] or "").strip() if isinstance(speakers[i], str) else ""
+            if sp:
+                by_speaker.setdefault(sp, []).append(reply)
+        repeated_speaker_echo = any(len(vals) >= 2 for vals in by_speaker.values()) and all(
+            len(set(vals)) == 1 for vals in by_speaker.values() if len(vals) >= 2
+        )
+        repeated_reply = len(run) >= 4 and len(set(replies)) < len(replies)
+        if len(run) >= 5 or repeated_speaker_echo or repeated_reply:
+            for i in run:
+                problems.setdefault(
+                    i, "it only echoes a speaker name instead of translating the line"
+                )
+
+    if count < 4:
+        return problems
+    batch_speakers = {
+        sp.strip() for sp in speakers if isinstance(sp, str) and sp.strip()
+    }
+    cjk_target = target_uses_cjk(target_language)
+    s_lens = [len(text) for text in orig_texts]
+    t_lens = [len(text) for text in trans_texts]
+    s_quoted = [
+        len(text) >= 2 and text[0] in "「『" and text[-1] in "」』"
+        for text in orig_texts
+    ]
+    t_quoted = [
+        len(text) >= 2 and text[0] in '"“「『' and text[-1] in '"”」』'
+        for text in trans_texts
+    ]
+    mix_quotes = any(s_quoted) and not all(s_quoted)
+    s_quest = [
+        bool((inner := text.rstrip("」』）)\"'” ")) and inner[-1] in "?？")
+        for text in orig_texts
+    ]
+    t_quest = [
+        bool((inner := text.rstrip("」』）)\"'” ")) and inner[-1] in "?？")
+        for text in trans_texts
+    ]
+    s_nums = [
+        set(re.findall(r"\d+", text.translate(_FW_DIGITS))) for text in orig_texts
+    ]
+    t_nums = [
+        set(re.findall(r"\d+", text.translate(_FW_DIGITS))) for text in trans_texts
+    ]
+    s_is_name = [
+        (str(sources[i]).strip() in batch_speakers and s_lens[i] <= 10 and not s_quoted[i])
+        or (
+            line_kinds[i] == "ui"
+            and s_lens[i] <= 6
+            and not s_quoted[i]
+            and not any(ch in orig_texts[i] for ch in "。！？!?")
+        )
+        for i in range(count)
+    ]
+    t_is_bare = [_is_bare_name_reply(text) for text in trans_texts]
+    s_is_sentence = [
+        s_lens[i] >= 10
+        and (
+            s_quoted[i]
+            or line_kinds[i] == "dialogue"
+            or bool(speakers[i])
+            or any(ch in orig_texts[i] for ch in "。！？!?")
+        )
+        for i in range(count)
+    ]
+    t_is_sentence = [
+        t_lens[i] >= 25
+        or t_quoted[i]
+        or bool(
+            (inner := trans_texts[i].rstrip("」』）)\"'” "))
+            and inner[-1] in ".!?！？。"
+        )
+        for i in range(count)
+    ]
+
+    def pair_scores(i, j):
+        mm = mt = 0
+        if s_is_name[i] and t_is_sentence[j]:
+            mm += 3
+        if s_is_sentence[i] and t_is_bare[j]:
+            mm += 3
+        if s_is_name[i] and t_is_bare[j]:
+            mt += 2
+        if s_nums[i] or t_nums[j]:
+            if s_nums[i] == t_nums[j]:
+                mt += 2
+            else:
+                if s_nums[i] - t_nums[j]:
+                    mm += 2
+                if t_nums[j] - s_nums[i]:
+                    mm += 2
+        if cjk_target:
+            if s_lens[i] >= 20 and t_lens[j] <= max(5, int(s_lens[i] * 0.25)):
+                mm += 2
+            if s_lens[i] <= 6 and t_lens[j] >= max(24, s_lens[i] * 4):
+                mm += 2
+        else:
+            if s_lens[i] >= 18 and t_lens[j] <= max(10, int(s_lens[i] * 0.45)):
+                mm += 2
+            if s_lens[i] <= 6 and t_lens[j] >= max(36, s_lens[i] * 7):
+                mm += 2
+        if mix_quotes and s_lens[i] >= 6 and t_lens[j] >= 6:
+            if s_quoted[i] != t_quoted[j]:
+                mm += 1
+            elif s_quoted[i] and t_quoted[j]:
+                mt += 1
+        if s_quest[i] and t_quest[j]:
+            mt += 1
+        elif s_quest[i] and not t_quest[j]:
+            mm += 1
+        elif t_quest[j] and not s_quest[i] and s_lens[i] >= 4:
+            mm += 1
+        return mm, mt
+
+    for delta in (1, -1):
+        run = []
+        valid_indices = [
+            i
+            for i in range(count)
+            if 0 <= i + delta < count
+            and str(translations[i]) != str(sources[i])
+            and str(translations[i + delta]) != str(sources[i + delta])
+        ]
+
+        def flush(segment):
+            if len(segment) < 4:
+                return
+            improved = [item[0] for item in segment if item[1] > 0 and item[3] > 0]
+            total_mm0 = sum(item[1] for item in segment)
+            total_mm1 = sum(item[2] for item in segment)
+            total_gain = sum(item[3] for item in segment)
+            distinct = len({sources[item[0]] for item in segment})
+            if (
+                len(improved) >= 4
+                and total_gain >= 8
+                and total_mm0 >= 6
+                and total_mm1 * 3 <= total_mm0
+                and distinct >= 3
+            ):
+                shifted = {item[0] for item in segment} | {i + delta for i in improved}
+                for index in sorted(shifted):
+                    problems.setdefault(
+                        index,
+                        "the batch appears shifted by one line (translations align with adjacent source lines)",
+                    )
+
+        for i in valid_indices:
+            mm0, mt0 = pair_scores(i, i)
+            mm1, mt1 = pair_scores(i, i + delta)
+            gain = (mm0 - mm1) + (mt1 - mt0)
+            if gain >= 0 and (not run or run[-1][0] == i - 1):
+                run.append((i, mm0, mm1, gain))
+            else:
+                flush(run)
+                run = [(i, mm0, mm1, gain)] if gain >= 0 else []
+        flush(run)
+    return problems
 
 
 def content_problems(sources, translations, language, target, protected=None):

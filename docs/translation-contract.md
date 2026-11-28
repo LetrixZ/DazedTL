@@ -109,14 +109,14 @@ A plan written by hand compiles the same way with `compile --input`, `plan-forma
 
 - `request --run ID --index N`, or `--request-sha256`, shows a request, its fingerprint and any accepted result.
 - An agent's receipt holds `request_sha256` and `translations`, an object with exactly the requested IDs and string values; save it in the game workspace and pass its path to `accept`.
-- accept rejects missing, duplicate, unexpected or empty lines, a line that fails Guided's content check ([validate_translation_content](../backend/dazedtl/engine/util/translation.py)), and one that changes its source's control codes or the scopes they open and close (`validate_unmasked_control_codes` in [runtime_text](../backend/dazedtl/engine/util/runtime_text.py)); only a ruby or a `TEXT_CODE` argument may change.
-  Where a request shows a name code as the actor's name, writing the name or the code is accepted.
-- An API run keeps a rejected line in its source text and accepts the rest of its request ([results](../backend/dazedtl/translation/results.py) `kept`); a request with no passing line fails, and nothing is sent again by itself.
-- A correction supplies `replaces_sha256` equal to the current `result_sha256`: the previous result is archived, and review, injection and QA of the changed lines become pending.
-  A line organize kept from an earlier request is corrected through the run that kept it (`reused_request` in [service](../backend/dazedtl/translation/service.py)).
+- `accept` rejects missing, duplicate, unexpected or empty lines, speaker-name echoes or one-line shifts, Guided's content-check failures ([validate_translation_content](../backend/dazedtl/engine/util/translation.py)), and changed control codes or scopes (`validate_unmasked_control_codes` in [runtime_text](../backend/dazedtl/engine/util/runtime_text.py)); only ruby or `TEXT_CODE` arguments may change.
+  Where a request shows a name code as the actor's name, either form is accepted.
+- An API run keeps a rejected line in source text and accepts the rest ([results](../backend/dazedtl/translation/results.py) `kept`); a request with no passing line fails, never resent automatically.
+- A correction passes `replaces_sha256` matching `result_sha256`: the prior result is archived, and review, injection and QA of changed lines reopen.
+  A line organize kept is corrected through the run that kept it (`reused_request` in [service](../backend/dazedtl/translation/service.py)); stale-file refusals name changed files and point to the latest organized run.
 - An ordinary retry can't overwrite an accepted translation; record a source-checked `review` only after doing it, and never regenerate hashes to make stale work count as current.
 - Accepted records live under `.dazedtl/len-method/work/accepted`, with their correction history; one checked under older refusal rules is read again under the current ones.
-- `results --run ID` writes the run's translations by line ID to `.dazedtl/len-method/work/results/ID.json`, with the cleanup and automatic lint fixes Guided gives every line, while the accepted record keeps each translation as accepted.
+- `results --run ID` writes translations by line ID to `.dazedtl/len-method/work/results/ID.json`, applying Guided's cleanup and lint fixes (skipping centered tildes on SAS5 via `dialogue_typography`), while accepted records stay as accepted.
 - For MV/MZ, `write_rpgmaker` writes that export into the game with Guided's punctuation and spacing (`written_message` in [rpgmaker_blocks](../backend/dazedtl/engine/util/rpgmaker_blocks.py)), and refuses once the extracted lines it was organized from change.
 - The app's progress export is a derived view, never a replacement for an engine's extraction or injection data.
 

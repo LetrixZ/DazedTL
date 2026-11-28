@@ -216,6 +216,9 @@ class TranslationEngine:
         # volumes; checked after the games recognized by their own root.
         if any(root.glob("*/*_Data")):
             return "Unity"
+        # SAS5 keeps its scenario in .sec5 files beside .iar/.war archives.
+        if any(path.is_file() for path in root.glob("*.sec5", case_sensitive=False)):
+            return "SAS5"
         return UNRECOGNIZED
 
     def documents(self, source):

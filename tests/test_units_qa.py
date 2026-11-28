@@ -551,6 +551,44 @@ class UnitsTextQATests(unittest.TestCase):
         self.step("undo", findings=[finding["id"]])
         self.assertEqual(self.english()["b/1"], "Good mornin.")
 
+    def test_sas5_export_and_qa_keep_ascii_tilde(self):
+        from dazedtl.compatibility.translation import TranslationEngine
+
+        # A SAS5 game folder with a .sec5 archive is detected as SAS5.
+        sas5_dir = self.root / "sas5-game"
+        sas5_dir.mkdir()
+        (sas5_dir / "game.sec5").write_bytes(b"SEC5")
+        self.assertEqual(TranslationEngine(self.profile).detect(sas5_dir), "SAS5")
+
+        # Identifying the project as SAS5 freezes dialogueTypography=False on
+        # organized runs, so exported translations and Text QA keep ASCII '~'
+        # instead of rewriting it to '～'.
+        (self.game / "game.sec5").write_bytes(b"SEC5")
+        self.service.identify(self.identity, "SAS5", "game.sec5")
+        self.translate(
+            [
+                {
+                    "id": "t/1",
+                    "scene": "Scene",
+                    "source": "ねえ〜、早く行こうよ。",
+                    "kind": "dialogue",
+                },
+                {
+                    "id": "t/2",
+                    "scene": "Scene",
+                    "source": "分かったよ〜。",
+                    "kind": "dialogue",
+                },
+            ],
+            {"t/1": "Hey~, let's go!", "t/2": "Okay~"},
+        )
+        self.assertEqual(self.english()["t/1"], "Hey~, let's go!")
+        self.assertEqual(self.english()["t/2"], "Okay~")
+        task = Path(self.step("prepare")["task"])
+        review(task, {"Okay~": "All right~"})
+        shown = self.service.state(self.identity)["textQa"]
+        self.assertEqual(shown["findings"][0]["correction"], "All right~")
+
 
 def review(task, fixes):
     """Plays Text QA's reviewers through the engine: screening reports each

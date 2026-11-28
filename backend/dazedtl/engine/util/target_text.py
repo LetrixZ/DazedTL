@@ -306,11 +306,26 @@ def kana_written(text, language, protected=()):
     return "".join(_line_stranded_kana(parts, language))
 
 
-def _settled(text, language, latin):
-    """*text* with font-safe apostrophes and tildes for a Latin target, a
-    character repeated more than 20 times cut to 20, and a long vowel mark
-    run after a kana repeating it for a Latin target."""
-    if latin:
+# Engines whose text renderer goes through the system's ANSI code page rather
+# than Unicode, so turning ASCII '~' into full-width '～' produces mojibake
+# and makes QA read wording that differs from the shipped game.
+PLAIN_TYPOGRAPHY_ENGINES = frozenset({"sas5"})
+
+
+def dialogue_typography(engine) -> bool:
+    """Whether a Latin-script translation for *engine* applies the dialogue
+    typography pass (normalize_dialogue_typography, e.g. '~' -> '～')."""
+    return not (
+        isinstance(engine, str)
+        and engine.strip().casefold() in PLAIN_TYPOGRAPHY_ENGINES
+    )
+
+
+def _settled(text, language, latin, typography=True):
+    """*text* with font-safe apostrophes and tildes for a Latin target when
+    *typography* is on, a character repeated more than 20 times cut to 20, and
+    a long vowel mark run after a kana repeating it for a Latin target."""
+    if latin and typography:
         # Japanese fonts may give smart apostrophes fullwidth advances and
         # raise ~. Normalize prose before engine-specific line wrapping
         # measures the output.
@@ -364,14 +379,16 @@ def _token_pattern(tokens):
     return re.compile("|".join([*map(re.escape, tokens), *PROTECTED_PATTERNS]))
 
 
-def translated_line(text, language, quotes=True, protected=()):
+def translated_line(text, language, quotes=True, protected=(), typography=True):
     """One line of a translation into *language* as Guided writes every line
     of a reply: cleaned as clean_reply cleans the reply, apart from the code
-    fences around a reply, then with typographic quotes as apostrophes (reply_quotes) and
-    corner brackets as quotes when *quotes* (corner_quotes, convertQuotes).
-    Codes and the literal *protected* tokens keep their spelling, as Guided
-    sends codes masked, so the reply never holds them, and the line's small
-    kana are repaired by its text around them (_line_stranded_kana)."""
+    fences around a reply (skipping normalize_dialogue_typography when
+    *typography* is False, as for ANSI-only engines such as SAS5), then with
+    typographic quotes as apostrophes (reply_quotes) and corner brackets as
+    quotes when *quotes* (corner_quotes, convertQuotes). Codes and the literal
+    *protected* tokens keep their spelling, as Guided sends codes masked, so
+    the reply never holds them, and the line's small kana are repaired by its
+    text around them (_line_stranded_kana)."""
     if not isinstance(text, str):
         return text
     latin = not full_width(language)
@@ -380,7 +397,7 @@ def translated_line(text, language, quotes=True, protected=()):
         run = _without_label(parts[index], language)
         if latin:
             run = _latin_marks(run, language)
-        parts[index] = _settled(run, language, latin)
+        parts[index] = _settled(run, language, latin, typography=typography)
     _line_stranded_kana(parts, language)
     for index in range(0, len(parts), 2):
         run = reply_quotes(parts[index], language)

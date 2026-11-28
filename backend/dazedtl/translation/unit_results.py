@@ -269,7 +269,9 @@ def _imported(source, fingerprint):
     return value if value.get("fingerprint") == fingerprint else None
 
 
-def translations(store, project_id, source, units, language, target, quotes=True):
+def translations(
+    store, project_id, source, units, language, target, quotes=True, typography=True
+):
     """Each of *units*' current translation as the game gets it, by unit ID:
     its newest saved receipt's (current), else, for a line without source
     letters, what DazedTL writes for it (organize.unsent). A unit with
@@ -281,7 +283,9 @@ def translations(store, project_id, source, units, language, target, quotes=True
     value = {}
     if answered:
         reused = record(units, answered, found)
-        for row in results.reused_units(reused, list(reused["units"]), listing, quotes):
+        for row in results.reused_units(
+            reused, list(reused["units"]), listing, quotes, typography=typography
+        ):
             if "translation" in row:
                 value[row["source_id"]] = row["translation"]
     left = [unit for unit in units if unit["id"] not in value]

@@ -149,7 +149,7 @@ def _requests(plan):
     return found
 
 
-def _rewritten(requests, quotes, units):
+def _rewritten(requests, quotes, units, typography=True):
     """_content of export rows written by older rules (EXPORT_VERSION), each
     translation written again by these rules (exported_line), so a row
     changes only when its saved translation did."""
@@ -160,7 +160,11 @@ def _rewritten(requests, quotes, units):
             row = {
                 **row,
                 "translation": exported_line(
-                    request, row["source_id"], row["translation"], quotes
+                    request,
+                    row["source_id"],
+                    row["translation"],
+                    quotes,
+                    typography=typography,
                 ),
             }
         rows.append(row)
@@ -249,13 +253,40 @@ def _bound_lines(request, translations):
     return output, bound
 
 
+def _alignment_failures(request, translations):
+    """Batch-level checks for speaker-name-only echoes and one-line shifts
+    (util/translation `batch_alignment_problems`), run over the request's
+    ordered lines with its speakers, kinds and prompt glossary."""
+    from util.translation import batch_alignment_problems
+
+    identities = list(request["sources"])
+    if not identities:
+        return {}
+    context = request["context"]
+    speakers = context.get("speakers") or {}
+    kinds = context.get("line_kinds") or {}
+    glossary = "\n".join(
+        text for key in ("system", "user") if isinstance(text := context.get(key), str)
+    )
+    problems = batch_alignment_problems(
+        [request["sources"][identity] for identity in identities],
+        [translations[identity] for identity in identities],
+        target_language(context),
+        speakers=[speakers.get(identity) for identity in identities],
+        line_kinds=[kinds.get(identity, "unknown") for identity in identities],
+        glossary_text=glossary,
+        protected=[protected_tokens(request, identity) for identity in identities],
+    )
+    return {identities[index]: reason for index, reason in problems.items()}
+
+
 def _checked(request, translations, keep):
     """The result's translations and the lines kept in their source text,
     refusing any line that holds a refusal note in place of game text,
-    whoever wrote it. A line that fails the content check or changed a
-    protected token, mask or layout bound refuses the result, unless keep:
-    then, while another line of it passes, the line keeps its source text,
-    as Guided keeps such a line of a response."""
+    whoever wrote it. A line that fails the content check, batch alignment
+    check, or changed a protected token, mask or layout bound refuses the
+    result, unless keep: then, while another line of it passes, the line
+    keeps its source text, as Guided keeps such a line of a response."""
     try:
         output, bound = result_value(request, translations), {}
     except ValueError:
@@ -271,6 +302,8 @@ def _checked(request, translations, keep):
             "Translate it, or decline the request so another model can finish it."
         )
     failures = {**bound, **_content_failures(request, output)}
+    for key, reason in _alignment_failures(request, output).items():
+        failures.setdefault(key, reason)
     sources = request["sources"]
     if not failures:
         if translates_nothing(request, {"translations": output}):
@@ -411,6 +444,10 @@ def review_digest(source, translation):
 # it froze as a Guided run freezes it in its engine settings; a run compiled
 # before it froze one writes them, as the setting does by default.
 QUOTES = "convertQuotes"
+# Whether a run applies the Latin-script dialogue typography pass
+# (util/target_text `dialogue_typography`, e.g. '~' -> '～'); ANSI-only engines
+# such as SAS5 freeze False so exported text stays ASCII.
+TYPOGRAPHY = "dialogueTypography"
 
 
 def run_quotes(plan):
@@ -418,26 +455,32 @@ def run_quotes(plan):
     return plan.get(QUOTES, True)
 
 
-def game_line(source, text, target, quotes=True, protected=()):
+def run_typography(plan):
+    """Whether the run *plan* applies the dialogue typography pass (TYPOGRAPHY)."""
+    return plan.get(TYPOGRAPHY, True)
+
+
+def game_line(source, text, target, quotes=True, protected=(), typography=True):
     """A translation *text* of *source* into *target* as the game gets it: as
     Guided writes every line of a reply (util/target_text `translated_line`),
     corner brackets as quotes when *quotes*, *protected* tokens kept as they
-    are, then with a slash its source holds before text no code names
-    escaped, as Guided restores it (util/runtime_text
-    `escaped_orphan_backslashes`), then with the automatic lint fixes Guided
-    gives a new translation (rpgmaker_qa_lint `normalize`). A line given
-    back as its source stays as it is, as Guided keeps such a line."""
+    are, dialogue typography applied when *typography*, then with a slash its
+    source holds before text no code names escaped, as Guided restores it
+    (util/runtime_text `escaped_orphan_backslashes`), then with the automatic
+    lint fixes Guided gives a new translation (rpgmaker_qa_lint `normalize`).
+    A line given back as its source stays as it is, as Guided keeps such a
+    line."""
     from util.rpgmaker_qa_lint import normalize
     from util.runtime_text import escaped_orphan_backslashes
     from util.target_text import translated_line
 
     if text == source:
         return text
-    line = translated_line(text, target, quotes, protected)
+    line = translated_line(text, target, quotes, protected, typography=typography)
     return normalize(source, escaped_orphan_backslashes(source, line), target)
 
 
-def exported_line(request, identity, text, quotes=True):
+def exported_line(request, identity, text, quotes=True, typography=True):
     """A line's saved translation as the game gets it (game_line), the
     line's protected tokens kept as they are."""
     return game_line(
@@ -446,6 +489,7 @@ def exported_line(request, identity, text, quotes=True):
         target_language(request["context"]),
         quotes,
         protected_tokens(request, identity),
+        typography=typography,
     )
 
 
@@ -460,11 +504,11 @@ def unsent_line(source, target, quotes=True):
     return unsent_text(source, target, ROWS, quotes)
 
 
-def exported(request, value, quotes=True):
+def exported(request, value, quotes=True, typography=True):
     """A saved result's translations as the game gets them (exported_line).
     The receipt keeps what was accepted."""
     return {
-        identity: exported_line(request, identity, text, quotes)
+        identity: exported_line(request, identity, text, quotes, typography=typography)
         for identity, text in value["translations"].items()
     }
 
@@ -798,10 +842,11 @@ class Results:
         write_project_json(self.source, self.relative(request), value)
         return value
 
-    def _saved(self, request, listing, quotes):
+    def _saved(self, request, listing, quotes, typography=True):
         """The request's accepted result, read where listing found its file,
         with its lines as the game gets them, corner brackets as quotes when
-        *quotes*, and those that are no translation (`untranslated`)."""
+        *quotes*, dialogue typography when *typography*, and those that are no
+        translation (`untranslated`)."""
         key = request["fingerprint"]
         value = None
         if key in listing:
@@ -809,14 +854,18 @@ class Results:
             value = self.get(request, path) if path else self.get(request)
         if not value:
             return None, {}, set()
-        return value, exported(request, value, quotes), left_lines(request, value)
+        return (
+            value,
+            exported(request, value, quotes, typography=typography),
+            left_lines(request, value),
+        )
 
-    def units(self, requests, listing, quotes=True):
+    def units(self, requests, listing, quotes=True, typography=True):
         """The export rows of requests, each with its saved result; a line
         saved as no translation reads left."""
         units = []
         for request in requests:
-            value, output, left = self._saved(request, listing, quotes)
+            value, output, left = self._saved(request, listing, quotes, typography)
             for identity, base, source_sha256 in _rows(request):
                 row = dict(base)
                 if value and identity not in left:
@@ -824,7 +873,15 @@ class Results:
                 units.append(row)
         return units
 
-    def reused_units(self, reused, identities, listing, quotes=True, constraints=None):
+    def reused_units(
+        self,
+        reused,
+        identities,
+        listing,
+        quotes=True,
+        constraints=None,
+        typography=True,
+    ):
         """The export rows of a run's units its organize left out, which
         earlier requests' receipts answer (translation/unit_results), by
         unit ID; a unit whose receipt is gone reads left. Each line keeps the
@@ -836,12 +893,14 @@ class Results:
             key = unit["request"]
             if key not in read:
                 request = indexed(key, reused["requests"][key])
+                known = constraints or {}
                 request["constraints"] = {
-                    line: constraints[line]
-                    for line in request["sources"]
-                    if line in (constraints or {})
+                    line: known[line] for line in request["sources"] if line in known
                 }
-                read[key] = (request, *self._saved(request, listing, quotes))
+                read[key] = (
+                    request,
+                    *self._saved(request, listing, quotes, typography),
+                )
             request, value, output, left = read[key]
             source = request["sources"][identity]
             row = {
@@ -908,6 +967,7 @@ class Results:
             else None
         )
         quotes = run_quotes(plan)
+        typography = run_typography(plan)
         # Rows written by older rules, read as these rules write them, so a
         # run already written into the game reads no new translation.
         older = (
@@ -915,7 +975,11 @@ class Results:
             and isinstance(previous_index, dict)
             and previous_index.get("version", 1) != EXPORT_VERSION
         )
-        counted = partial(_rewritten, _requests(plan), quotes) if older else _content
+        counted = (
+            partial(_rewritten, _requests(plan), quotes, typography=typography)
+            if older
+            else _content
+        )
         # Each part's inputs, which fix its rows, ending with the signature of
         # a result file they read, and how its rows are built.
         groups: list[tuple[tuple[tuple, ...], partial[list]]] = [
@@ -924,7 +988,7 @@ class Results:
                     (row["fingerprint"], listing.get(row["fingerprint"], _NONE)[1])
                     for row in group
                 ),
-                partial(self.units, group, listing, quotes),
+                partial(self.units, group, listing, quotes, typography),
             )
             for group in (
                 requests[start : start + PART_REQUESTS]
@@ -952,7 +1016,13 @@ class Results:
                 (
                     inputs,
                     partial(
-                        self.reused_units, reused, group, listing, quotes, constraints
+                        self.reused_units,
+                        reused,
+                        group,
+                        listing,
+                        quotes,
+                        constraints,
+                        typography,
                     ),
                 )
             )
@@ -982,7 +1052,10 @@ class Results:
             relative = EXPORT_PARTS + "/" + name
             parts.append(relative)
             path = folder / name
-            if _PARTS.get(str(path)) == ((quotes, inputs), _signature(path)):
+            if _PARTS.get(str(path)) == (
+                (quotes, typography, inputs),
+                _signature(path),
+            ):
                 continue
             document = {"units": build()}
             previous = read_json(path) if path.exists() else None
@@ -997,7 +1070,7 @@ class Results:
                 signature_settled(item)
                 for item in (stamp, *(item[-1] for item in inputs))
             ):
-                _PARTS[str(path)] = ((quotes, inputs), stamp)
+                _PARTS[str(path)] = ((quotes, typography, inputs), stamp)
         index = {
             "complete": plan["complete"],
             "parts": parts,

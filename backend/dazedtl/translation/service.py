@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from util import guidance_documents
+from util.target_text import dialogue_typography
 
 from dazedtl.actions import history_label
 from dazedtl.compatibility import estimate_prices
@@ -104,11 +105,13 @@ from .requests import (
 from .result_checks import CHECK_STEP
 from .results import (
     QUOTES,
+    TYPOGRAPHY,
     Results,
     exported,
     left_lines,
     review_digest,
     run_quotes,
+    run_typography,
 )
 from .runner import FIXABLE
 from .window_title import WindowTitle
@@ -557,20 +560,11 @@ class Translation:
         saved_jobs = listed[:30]
         warnings.extend(self.jobs.store.warnings)
         status = project_path(project.root, WORK + "/status.md", exists=False)
-        identification = (
-            self.workspace / "translation/projects" / project_id / "engine.json"
-        )
-        detected = engine = self.engine.detect(project.root)
+        detected = self.engine.detect(project.root)
+        engine, warning = self._engine_name(project_id, project.root, detected)
         saved_lifecycle = lifecycle(self.workspace, project_id)
-        if identification.is_file():
-            identified = read_json(identification)
-            try:
-                verify_evidence(project.root, identified["evidence"])
-                engine = identified["engine"]
-            except ValueError, OSError:
-                warnings.append(
-                    "The reported engine evidence changed. Recheck the engine before adapting its tools."
-                )
+        if warning:
+            warnings.append(warning)
         legacy = self.legacy_record(project_id)
         unavailable, unread = batch_reasons(self.settings)
         drafts = self.drafts(project_id)
@@ -1207,11 +1201,14 @@ Additional project instructions:
             raise ValueError(
                 "This route does not support Batch execution. Choose a supported connection or explicitly select Live."
             )
+        engine, _warning = self._engine_name(project_id, project.root)
         frozen = {
             "configuration": cfg,
             "batch": bool(batch_provider),
             # Its translations write corner brackets as Guided's would.
             QUOTES: self.settings.convert_quotes(),
+            # ANSI-only engines such as SAS5 keep ASCII '~' instead of '～'.
+            TYPOGRAPHY: dialogue_typography(engine),
         }
         if method == MANUAL:
             frozen["method"] = MANUAL
@@ -1680,6 +1677,7 @@ Additional project instructions:
             ) from None
         saved = Results(plan["source"])
         quotes = run_quotes(plan)
+        typography = run_typography(plan)
         translations, missing, reopened = {}, {}, False
         for request in plan["requests"]:
             value = saved.get(request)
@@ -1689,7 +1687,9 @@ Additional project instructions:
                 left = left_lines(request, value)
                 translations.update(
                     (identity, text)
-                    for identity, text in exported(request, value, quotes).items()
+                    for identity, text in exported(
+                        request, value, quotes, typography=typography
+                    ).items()
                     if identity not in left
                 )
                 missing.update(dict.fromkeys(left, "untranslated"))
@@ -1704,7 +1704,11 @@ Additional project instructions:
         # Lines an earlier request translated, which organize left out; one
         # whose translation is gone waits for the next organize.
         for row in saved.reused_units(
-            reused, list(reused["units"]), saved.listing(), quotes
+            reused,
+            list(reused["units"]),
+            saved.listing(),
+            quotes,
+            typography=typography,
         ):
             if "translation" in row:
                 translations[row["source_id"]] = row["translation"]
@@ -1885,7 +1889,15 @@ Additional project instructions:
                 "The receipt must bind translations to this request_sha256."
             )
         # An assistant imports one receipt per request, so each checks only its own.
-        self.validate_current(project_id, plan, index=index)
+        if "replaces_sha256" in receipt:
+            self.validate_current(
+                project_id,
+                plan,
+                index=index,
+                step=self._correction_step(project_id, run_id),
+            )
+        else:
+            self.validate_current(project_id, plan, index=index)
         request = plan["requests"][index]
         if job["states"][batch_id]["state"] in {"sending", "queued", "uncertain"}:
             raise ValueError(
@@ -1952,7 +1964,12 @@ Additional project instructions:
             )
         # The run's lines are checked; its requests' guidance may have
         # changed since the earlier request was sent, as organize allows.
-        self.validate_current(project_id, plan, compiled=False)
+        self.validate_current(
+            project_id,
+            plan,
+            compiled=False,
+            step=self._correction_step(project_id, job["id"]),
+        )
         self.jobs.store.overlapping(project_id, {fingerprint}, exclude=job["id"])
         found = self.reused_request(project_id, plan, fingerprint)
         if found is None:
@@ -2030,6 +2047,7 @@ Additional project instructions:
         reused = (plan.get("reused") or {"requests": {}})["requests"]
         results = Results(project.root)
         quotes = run_quotes(plan)
+        typography = run_typography(plan)
         units = None
         read = []
         left_out: dict[str, str] = {}
@@ -2069,14 +2087,16 @@ Additional project instructions:
             value = results.get(request)
             if not value:
                 raise LookupError(next(iter(lines)))
-            shown = exported(request, value, quotes)
+            shown = exported(request, value, quotes, typography=typography)
             for identity, (expected, _text) in lines.items():
                 # The English given is the export's, or a correction saved
                 # before, which the export writes in its own form, such as
                 # straight quotes for a reviewer's curly ones.
                 if shown.get(identity) not in {
                     expected,
-                    exported_line(request, identity, expected, quotes),
+                    exported_line(
+                        request, identity, expected, quotes, typography=typography
+                    ),
                 }:
                     raise LookupError(identity)
             # A line kept from an earlier request is checked under the
@@ -2657,6 +2677,38 @@ If you won't translate a request, skip it and go on; it stays declined. Use the 
         )
         self.jobs.store.save(job)
         return self.jobs.store.view(job)
+
+    def _engine_name(self, project_id, root, detected=None):
+        """The project's engine name: the assistant's verified identify record
+        when current, else the detected engine, with any stale-evidence warning."""
+        engine = self.engine.detect(root) if detected is None else detected
+        identification = (
+            self.workspace / "translation/projects" / project_id / "engine.json"
+        )
+        if identification.is_file():
+            identified = read_json(identification)
+            try:
+                verify_evidence(root, identified["evidence"])
+                engine = identified["engine"]
+            except ValueError, OSError:
+                return (
+                    engine,
+                    "The reported engine evidence changed. Recheck the engine before adapting its tools.",
+                )
+        return engine, ""
+
+    def _correction_step(self, project_id, run_id):
+        """What to do when a correction receipt's run no longer matches current
+        files: point to a newer organized run if one exists, else to organizing
+        again."""
+        found = exchange.assistant_run(self.jobs.store, project_id)
+        if found is not None and found[0]["id"] != run_id:
+            return (
+                f"Apply corrections through the latest organized run ({found[0]['id']}), "
+                "which keeps these lines under the current files, or organize the units "
+                "again and apply them there."
+            )
+        return REORGANIZE
 
     def identify(self, project_id, engine, evidence_file):
         self.idle(project_id)

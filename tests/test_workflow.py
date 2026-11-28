@@ -1116,8 +1116,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(set(plan["reused"]["units"]), {"a/2", "b/1"})
         self.assertEqual([row["id"] for row in plan["requests"]], [earlier["id"]])
         corrected = {"a/1": "Yes.", "a/2": "Nope."}
-        # The run that translated the line refuses its guidance changed.
-        with self.assertRaisesRegex(ValueError, "Compile and review"):
+        # The run that translated the line refuses its changed files, naming
+        # them and pointing corrections to the latest organized run.
+        with self.assertRaisesRegex(
+            ValueError, rf"Source or guidance changed:.*{units}.*{second['id']}"
+        ):
             accept(first, earlier, corrected, saved["result_sha256"])
         accept(second, earlier, corrected, saved["result_sha256"])
         value = results.get(earlier)

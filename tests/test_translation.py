@@ -2692,6 +2692,132 @@ class TranslationTests(unittest.TestCase):
                 self.assertIn(named, str(caught.exception))
                 self.assertNotIn("秘密", str(caught.exception))
 
+    def test_dialogue_typography_switch_keeps_ascii_tilde_for_sas5(self):
+        from dazedtl.translation.results import game_line
+        from util.target_text import dialogue_typography, translated_line
+
+        self.assertFalse(dialogue_typography("SAS5"))
+        self.assertFalse(dialogue_typography("sas5"))
+        self.assertTrue(dialogue_typography("RPG Maker MZ"))
+        self.assertTrue(dialogue_typography(None))
+        # Engines without the centered-tilde pass keep ASCII '~' instead of '～'.
+        self.assertEqual(translated_line("Hey~", "English", typography=True), "Hey～")
+        self.assertEqual(translated_line("Hey~", "English", typography=False), "Hey~")
+        self.assertEqual(
+            game_line("ねえ〜", "Hey~", "English", typography=True), "Hey～"
+        )
+        self.assertEqual(
+            game_line("ねえ〜", "Hey~", "English", typography=False), "Hey~"
+        )
+
+    def test_accept_and_kept_reject_speaker_name_echoes_and_one_line_shifts(self):
+        from dazedtl.translation.results import kept, translated
+        from util.translation import (
+            batch_alignment_problems,
+            source_pattern,
+            validate_translation_content,
+        )
+
+        # A shifted batch echoing speaker names across a run of dialogue lines
+        # must fail accept() and kept().
+        request = {
+            "id": "shift-1",
+            "sources": {
+                "l1": "待ってよ、早く行こう！",
+                "l2": "分かった、すぐ行くよ。",
+                "l3": "ほら、もうすぐ着くからね。",
+                "l4": "本当にここで合ってるの？",
+                "l5": "大丈夫、地図にそう書いてあった。",
+            },
+            "constraints": {},
+            "context": {
+                "source_language": "Japanese",
+                "target_language": "English",
+                "kinds": {f"l{n}": "dialogue" for n in range(1, 6)},
+                "speakers": {
+                    "l1": "ミナ",
+                    "l2": "タクヤ",
+                    "l3": "ミナ",
+                    "l4": "タクヤ",
+                    "l5": "ミナ",
+                },
+            },
+        }
+        echoed = {
+            "l1": "Mina",
+            "l2": "Takuya",
+            "l3": "Mina",
+            "l4": "Takuya",
+            "l5": "Mina",
+        }
+        self.assertTrue(
+            batch_alignment_problems(
+                list(request["sources"].values()),
+                list(echoed.values()),
+                "English",
+                speakers=list(request["context"]["speakers"].values()),
+                line_kinds=list(request["context"]["kinds"].values()),
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "speaker name"):
+            translated(request, echoed)
+        with self.assertRaisesRegex(ValueError, "speaker name"):
+            kept(request, echoed)
+
+        # A one-line shift where punctuation/question-mark alignment matches
+        # neighbor lines instead of the line itself is rejected in both
+        # Assistant-led (accept/kept) and Guided (validate_translation_content).
+        shift_request = {
+            "id": "shift-2",
+            "sources": {
+                "s1": "本当ですか？",
+                "s2": "はい、もちろんです。",
+                "s3": "どこへ行くのですか？",
+                "s4": "駅の近くまでです。",
+                "s5": "何時に戻りますか？",
+                "s6": "夕方までには戻ります。",
+                "s7": "お土産を買ってきますか？",
+            },
+            "constraints": {},
+            "context": {
+                "source_language": "Japanese",
+                "target_language": "English",
+                "kinds": {f"s{n}": "dialogue" for n in range(1, 8)},
+                "speakers": {f"s{n}": None for n in range(1, 8)},
+            },
+        }
+        shifted = {
+            "s1": "Heading out now.",
+            "s2": "Really?",
+            "s3": "Yes, of course.",
+            "s4": "Where are you going?",
+            "s5": "Near the station.",
+            "s6": "What time will you be back?",
+            "s7": "I'll be back before evening.",
+        }
+        with self.assertRaisesRegex(ValueError, "shifted by one line"):
+            translated(shift_request, shifted)
+        guided_ok, _invalid, guided_reasons = validate_translation_content(
+            list(shift_request["sources"].values()),
+            list(shifted.values()),
+            source_pattern(language="Japanese"),
+            "English",
+        )
+        self.assertFalse(guided_ok)
+        self.assertTrue(
+            any("shifted by one line" in reason for reason in guided_reasons)
+        )
+        aligned = {
+            "s1": "Really?",
+            "s2": "Yes, of course.",
+            "s3": "Where are you going?",
+            "s4": "Near the station.",
+            "s5": "What time will you be back?",
+            "s6": "I'll be back before evening.",
+            "s7": "Should I bring back a souvenir?",
+        }
+        self.assertEqual(translated(shift_request, aligned), aligned)
+
 
 class ClarifyOnceTests(unittest.TestCase):
     def test_both_journals_clarify_a_request_once_and_record_it_before_sending(self):

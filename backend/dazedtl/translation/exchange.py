@@ -22,7 +22,7 @@ from dazedtl.settings import language_pair
 from . import organize, translation_file, unit_results
 from .files import project_path, read_json
 from .project import MANUAL_UNITS
-from .results import run_quotes
+from .results import run_quotes, run_typography
 
 
 class UnitLines:
@@ -30,11 +30,11 @@ class UnitLines:
     results, which Assistant-led's assistant or a Manual project's own
     extractor wrote."""
 
-    def __init__(self, store, project_id, root, units, pair, quotes):
+    def __init__(self, store, project_id, root, units, pair, quotes, typography=True):
         self.store, self.project_id, self.root = store, project_id, Path(root)
         self.units = units
         self.by_id = {unit["id"]: unit for unit in units}
-        self.pair, self.quotes = pair, quotes
+        self.pair, self.quotes, self.typography = pair, quotes, typography
 
     def lines(self):
         """Each unit's fields with its current translation, or None."""
@@ -46,6 +46,7 @@ class UnitLines:
             self.pair["source"],
             self.pair["target"],
             self.quotes,
+            typography=self.typography,
         )
         return [
             {
@@ -118,6 +119,7 @@ def assistant_run(store, project_id, jobs=None):
                         "units": str(inputs[0]),
                         "target": plan["configuration"]["language"],
                         "quotes": run_quotes(plan),
+                        "typography": run_typography(plan),
                     }
                 except OSError, ValueError, KeyError, IndexError, TypeError:
                     return None
@@ -220,16 +222,19 @@ class Exchange:
                 pair,
                 self.guided_lines(project_id, pair, settings.convert_quotes()),
             )
+        typography = True
         if method == "manual":
             if not project_path(root, MANUAL_UNITS, exists=False).is_file():
                 raise ValueError("Load your text file first.")
             units = units_file(root, MANUAL_UNITS)
         else:
+            found = assistant_run(self.translation.jobs.store, project_id)
             units = assistant_units(self.translation.jobs.store, project_id, root)
-            if units is None:
+            if found is None or units is None:
                 raise ValueError(
                     "Your assistant hasn't organized the game's text yet, so there are no lines to export or import."
                 )
+            typography = found[1].get("typography", True)
         lines = UnitLines(
             self.translation.jobs.store,
             project_id,
@@ -237,6 +242,7 @@ class Exchange:
             units,
             pair,
             settings.convert_quotes(),
+            typography=typography,
         )
         return record, root, pair, lines
 

@@ -39,7 +39,7 @@ from .operations import (
 )
 from .project import MANUAL, WORK, ProjectWorkspace, scope
 from .requests import plan_input, quote
-from .results import QUOTES, Results
+from .results import QUOTES, TYPOGRAPHY, Results
 from .runner import SHARED_PAYLOADS, askers
 
 # Operations the app starts with the settings a run freezes; the helper's
@@ -344,6 +344,7 @@ def _organize(engine, workspace, job, plan, progress):
                     organize.neighbours(packed, translated),
                     listing,
                     frozen.get(QUOTES, True),
+                    typography=frozen.get(TYPOGRAPHY, True),
                 )
             )
     progress(f"Grouping {len(left):,} lines into requests")
@@ -516,6 +517,7 @@ def compile_run(
         "input_path": input_path,
         "batch_limits": limits,
         QUOTES: frozen.get(QUOTES, True),
+        TYPOGRAPHY: frozen.get(TYPOGRAPHY, True),
         **method,
     }
     if limits:

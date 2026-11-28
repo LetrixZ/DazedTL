@@ -317,7 +317,13 @@ class Lines:
                 "constraints": {line["id"]: line["constraints"]},
                 "context": {"target_language": organized["target"]},
             }
-            return exported_line(request, line["id"], value, organized["quotes"])
+            return exported_line(
+                request,
+                line["id"],
+                value,
+                organized["quotes"],
+                typography=organized.get("typography", True),
+            )
 
         document = {**document}
         findings = []
