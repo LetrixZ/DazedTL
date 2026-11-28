@@ -6,6 +6,7 @@
 - **Translate:** an Assistant-led project can have its assistant only extract images, leaving investigating and translating them to you in the Images tab.
 - **Settings > Remote access:** drive this install from another computer's browser, with a token and its own address and port.
 - **Translate:** Assistant-led knows the SAS5 engine, with tools for its .sec5 text, .exe UI resources and .iar images, and keeps ASCII tildes.
+- **Checkpoints:** a game's `.dazedtl` work, such as Plugin files and edited images, gets its own Git history in `.dazedtl/work.git`.
 
 ### Changed
 

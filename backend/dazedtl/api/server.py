@@ -16,7 +16,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from dazedtl import system
 from dazedtl.api.contracts.methods import METHODS
 from dazedtl.api.local import LocalAPI
-from dazedtl.compatibility import game_write, original_files, original_record
+from dazedtl.compatibility import (
+    game_write,
+    original_files,
+    original_record,
+    work_history,
+)
 from dazedtl.compatibility.compare import running as compare_running
 from dazedtl.compatibility.dazedmtl import ExistingBackend
 from dazedtl.compatibility.runtime import ENGINE_ROOT
@@ -82,6 +87,12 @@ class Application:
         location.use(self.workspace)
         self.projects = Projects(self.workspace)
         self.projects.data["screen"] = "project"
+        # Commits each game's .dazedtl work beside its checkpoints; serve
+        # starts it.
+        self.work = work_history.Committer(
+            lambda: [p["source"] for p in self.projects.data["projects"]],
+            lambda error: self.failure(error, "work_history"),
+        )
         self.backend = ExistingBackend(self.workspace / "engine", allow_providers)
         with self.backend.context():
             self.settings = Settings(self.workspace, self.backend)
@@ -239,6 +250,7 @@ class Application:
         if available:
             self.record_originals(project)
             self.unlist_inspector(project)
+            self.work.open(project["source"])
         if project and project.get("backend_id") and available:
             # Queued work starts before this reads what runs.
             try:
@@ -1355,6 +1367,7 @@ def assistant_dispatch(app, dispatch):
 def serve(args, diagnostics):
     os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     app = Application(args.workspace, not args.offline, diagnostics.failure)
+    app.work.start()
     dispatch = dispatcher(app, os.environ.get("DAZEDTL_CHECK_CONTRACTS") == "1")
     local = LocalAPI(
         app.workspace,
@@ -1465,6 +1478,7 @@ def serve(args, diagnostics):
         local.close()
         app.translation.jobs.close()
         original_record.close()
+        app.work.close()
         derived.close()
         app.images.close()
         try:

@@ -49,6 +49,10 @@ as `_run_git` does. A write refuses before it writes while the index lock is
 held, and the game's index lock is taken before the branch moves, so one a
 crashed Git left fails the write with nothing written or committed.
 
+Each checkpoint marks the game's work under `.dazedtl/` for its own
+history's next commit ([work_history](work_history.py)), which the backend
+makes in the background.
+
 Each Git process is slow to start on Windows, so a checkpoint asks Git only
 what it can't know: the write's read of the repository is carried through
 it (`carrying`) and kept while the checkpoints leave what it read as it is
@@ -544,6 +548,13 @@ def _commit(root, paths, change, status):
         return None
     tree, commit = made
     _tree(root, commit, tree)
+    from . import work_history
+
+    # The work beside the change, for its own history; it starts no process.
+    try:
+        work_history.touch(root, commit, text.splitlines()[0])
+    except OSError:
+        pass  # The next checkpoint marks it again.
     return commit
 
 

@@ -109,6 +109,24 @@ def describe_png(image):
     return result
 
 
+def edited_copies(path):
+    """The game-relative paths of the editable copies the inventory at
+    `path` marks changed from their original, read without creating or
+    changing it; none while there is no inventory."""
+    if not Path(path).is_file():
+        return []
+    db = sqlite3.connect(Path(path).as_uri() + "?mode=ro", uri=True, timeout=10)
+    try:
+        rows = [json.loads(raw) for (raw,) in db.execute("SELECT data FROM assets")]
+    finally:
+        db.close()
+    return sorted(
+        row["editable"]
+        for row in rows
+        if row.get("changed") and isinstance(row.get("editable"), str)
+    )
+
+
 def image_folder(state):
     """The game-relative folder the Image Manager reads, from its saved
     state: the loose image folder the user or an assistant chose, or the

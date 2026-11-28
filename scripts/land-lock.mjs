@@ -121,7 +121,7 @@ export const platformPaths = [
   // paths kept project-relative (files.py); folders a task moves
   // (start_over.py); release ZIPs; VX Ace's own tools.
   /^backend\/dazedtl\/(system|storage|stdio)\.py$/,
-  /^backend\/dazedtl\/compatibility\/(checkpoint\w*|game_write|original_files|\w+_worker|images)\.py$/,
+  /^backend\/dazedtl\/compatibility\/(checkpoint\w*|game_write|original_files|work_history|\w+_worker|images)\.py$/,
   /^backend\/dazedtl\/engine\/desktop\/backend\/(\w+_worker|\w+_environment|manual)\.py$/,
   /^backend\/dazedtl\/translation\/(jobs|ownership|helper_command|files|context_setup|start_over|release)\.py$/,
   /^backend\/dazedtl\/images\/service\.py$/,

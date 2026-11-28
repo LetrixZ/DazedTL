@@ -420,6 +420,14 @@ The game folder's Git repository is the one record of a translation: every chang
 - Each feature's apply names its checkpoint, so undoing it or going back past it takes out what the features applied there ([checkpoint_records](../backend/dazedtl/translation/checkpoint_records.py)).
 - Save a copy writes the game as of a checkpoint into a new folder, and Electron opens only folders the backend returns.
 
+## Work history
+
+The game's `.dazedtl` folder, which its repository ignores but for the portable files, has a Git history of its own, to back up the work Plugin files, Images, Guided, Manual and Assistant-led keep there ([work_history](../backend/dazedtl/compatibility/work_history.py), whose docstring holds the rules).
+
+- Its Git folder is `.dazedtl/work.git`, never a nested `.git`, which would stop the game's repository adding the portable files.
+- It holds an allowlist; of the Images work, only the copies the inventory marks changed, as Git LFS files, and never an original.
+- Each checkpoint marks the game, starting no process, and the backend commits marked games in the background, and each game open in the session when another opens and at close; a commit names the checkpoint it follows.
+
 ## Original game files
 
 A game's original files are kept in its own repository under the private ref `refs/dazedtl/originals` ([original_files](../backend/dazedtl/compatibility/original_files.py), whose docstring holds the kinds of record).

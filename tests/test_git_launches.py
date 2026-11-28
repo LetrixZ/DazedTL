@@ -20,6 +20,7 @@ from dazedtl.compatibility import (
     checkpoint_history,
     game_write,
     original_files,
+    work_history,
 )
 from dazedtl.compatibility.checkpoint_commits import for_action, running
 from dazedtl.compatibility.game_write import write_game
@@ -123,6 +124,8 @@ class GitLaunchTests(unittest.TestCase):
         game, count, write = self.game, self.count, self.write
         count("Set up in a new process", self.set_up, True)
         count("a write in a new process", lambda: write(b'{"a": 1}'), True)
+        # Its checkpoint marks the work history's next commit, starting no Git.
+        self.assertTrue(work_history.marked(game))
         count("a write after another", lambda: write(b"[null]", "data/Items.json"))
         (game / "data/System.json").write_bytes(b"{}")
         count("a write after an edit made outside DazedTL", lambda: write(b"{}"))

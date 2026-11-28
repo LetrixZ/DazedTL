@@ -65,7 +65,7 @@ Pick Manual if you have your own tools that extract a game's text and write it b
 
 DazedTL already does the safekeeping inside the game folder:
 
-- Every change it makes is a [checkpoint](#checkpoints-and-undo) you can undo, and edits you make outside DazedTL get one of their own, so there is nothing to save by hand.
+- Every change it makes is a [checkpoint](#checkpoints-and-undo) you can undo.
 - Before it first changes the game, it records the original files in the game folder's Git repository.
 - A new version of the game merges into your checkpoints through [Game updates](#game-updates).
 
@@ -237,6 +237,7 @@ Every change DazedTL makes to the game is a checkpoint on the Project page's **C
 
 Undoing is a checkpoint too, so it can be undone.
 Edits you make to the game outside DazedTL become a checkpoint of their own.
+DazedTL's own work in `.dazedtl`, such as Plugin files and edited images, gets a Git history too, in `.dazedtl/work.git`.
 In **History**, **Undo** takes out a whole batch at once, such as Text QA's corrections or the playtest's fixes.
 
 ### Game updates

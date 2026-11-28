@@ -176,7 +176,7 @@ Every change DazedTL makes to the game is a [checkpoint](architecture.md#checkpo
 - The app also checkpoints the assistant's own work at each progress report and when a translation run ends, named for the phase the last report named, and `write_rpgmaker` and `rebase_rpgmaker` wait for that checkpoint.
 - Undoing a phase's checkpoint, or going back past it, reopens that phase and every later one, and a game update reopens extraction and the phases after it ([progress_report](../backend/dazedtl/translation/progress_report.py)).
 - Changes made outside DazedTL get a checkpoint of their own before the next change DazedTL makes.
-- Don't create full workspace copies or checkpoint ZIPs.
+- Don't create full workspace copies or checkpoint ZIPs, and leave `.dazedtl/work.git` to DazedTL, which commits the [work history](architecture.md#work-history).
   DazedTL takes no new backups: `backups` lists older ones, and `restore_backup` restores one into a new folder outside the game without overwriting anything; the [user guide](user-guide.md#backups-from-before-checkpoints) covers recovery without the app.
 
 Packaging:
