@@ -2660,6 +2660,87 @@ const imagesRevised = () => {
  *   from?: "previous", upgrade?: boolean,
  *   steps: () => [string, (context: any) => Promise<unknown>][] }>}
  */
+/** The picture in the loose images folder, translated and applied. */
+const looseApplied = [
+  "Translate the lettered picture in the suggested images folder and apply it",
+  async ({ page, state }) => {
+    await page.click(/^Images\b/);
+    await page.waitText(lettered[0]);
+    await tickImage(page, lettered[0]);
+    const request = editImages(
+      state,
+      await copyTask(page, state, "Copy translation task (1)"),
+    );
+    await applyImages(page, 1);
+    await until(
+      "the picture to read Applied",
+      async () => (await imageRow(page, loosePicture))?.state === "applied",
+    );
+    state.loosePicture = editedCopy(state, request, loosePicture);
+  },
+];
+
+/**
+ * Git in the game's work history (backend/dazedtl/compatibility/work_history.py),
+ * whose Git folder is .dazedtl/work.git and work tree .dazedtl.
+ */
+function workGit(state, ...args) {
+  const work = path.join(state.game, ".dazedtl");
+  return execFileSync("git", args, {
+    cwd: work,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_DIR: path.join(work, "work.git"),
+      GIT_WORK_TREE: work,
+    },
+  });
+}
+
+const workHistory = [
+  "The work history commits beside the last checkpoint",
+  async ({ state }) => {
+    const game = (...args) =>
+      execFileSync("git", args, { cwd: state.game, encoding: "utf8" }).trim();
+    const checkpoint = game("rev-parse", "HEAD");
+    await until(
+      "a work commit naming the last checkpoint",
+      () =>
+        fs.existsSync(path.join(state.game, ".dazedtl/work.git/HEAD")) &&
+        workGit(
+          state,
+          "log",
+          "--format=%(trailers:key=DazedTL-Checkpoint,valueonly)",
+        ).includes(checkpoint),
+      60_000,
+    );
+    const held = workGit(state, "ls-files").split("\n").filter(Boolean);
+    for (const name of [".gitattributes", "glossary.txt", "settings.json"])
+      if (!held.includes(name))
+        throw new Error(`The work history lacks ${name}: ${held.join(", ")}.`);
+    const out = held.filter((name) =>
+      /^(ace|backups|archived)\/|^image_manager\/guided\/inventory\.sqlite3$/.test(
+        name,
+      ),
+    );
+    if (out.length)
+      throw new Error(
+        `The work history holds what it leaves out: ${out.join(", ")}.`,
+      );
+    // The applied picture's edited copy, as a Git LFS file, and no other image.
+    const images = held.filter((name) => name.startsWith("images/"));
+    if (images.length !== 1 || !images[0].endsWith(lettered[0]))
+      throw new Error(
+        `The work history holds these images: ${images.join(", ")}.`,
+      );
+    if (!workGit(state, "lfs", "ls-files", "--name-only").includes(images[0]))
+      throw new Error(`${images[0]} is not a Git LFS file.`);
+    // The game's own repository still tracks its portable files.
+    if (!game("ls-files", ".dazedtl/glossary.txt"))
+      throw new Error("The game's repository no longer tracks its glossary.");
+  },
+];
+
 export const scenarios = {
   fresh: {
     description: "An untouched game and an empty profile.",
@@ -2780,25 +2861,7 @@ export const scenarios = {
       open,
       ...setup,
       ...translateAll,
-      [
-        "Translate the lettered picture in the suggested images folder and apply it",
-        async ({ page, state }) => {
-          await page.click(/^Images\b/);
-          await page.waitText(lettered[0]);
-          await tickImage(page, lettered[0]);
-          const request = editImages(
-            state,
-            await copyTask(page, state, "Copy translation task (1)"),
-          );
-          await applyImages(page, 1);
-          await until(
-            "the picture to read Applied",
-            async () =>
-              (await imageRow(page, loosePicture))?.state === "applied",
-          );
-          state.loosePicture = editedCopy(state, request, loosePicture);
-        },
-      ],
+      looseApplied,
       [
         "Build a patch ZIP that holds the applied picture",
         async ({ page, state }) => {
@@ -3420,6 +3483,12 @@ export const scenarios = {
     description:
       "A game translated Manually: a stand-in for the user's own extractor writes its text into a translation file, which Text loads and a Live run translates, its own injector writes the export into the game, and the Project page imports a translation edited by hand.",
     steps: () => manualLed,
+  },
+  "work-history": {
+    description:
+      "images-released's picture applied, then the game's .dazedtl work history checked: a commit names the last checkpoint, it holds the glossary and settings, the applied picture's edited copy alone of the images as a Git LFS file, and none of the VX Ace originals or the Images inventory, and the game's repository still tracks its glossary.",
+    game: "ace+loose-images",
+    steps: () => [open, ...setup, ...translateAll, looseApplied, workHistory],
   },
   playtested: {
     description:
